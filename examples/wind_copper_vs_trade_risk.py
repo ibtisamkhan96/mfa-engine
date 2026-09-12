@@ -15,6 +15,17 @@ copper price used to convert tonnes to USD so the two can be compared in
 the same unit, and that price is explicitly cited rather than assumed:
 2026 average LME copper price, approximately 12,842 USD/t (Trading
 Economics / MacroMicro market data, checked live while building this).
+
+The recovery series fed to the connector is annualized (mean tonnes per
+year), not summed across the whole 2020-2050 projection, on purpose: the
+real cascade shortfall is a one-year disruption estimate, and comparing
+that against everything ever recovered by an arbitrary horizon year
+compares two different time scales. For copper that mismatch stays under
+1% and is easy to miss; it stops being avoidable once the same connector
+is pointed at a smaller global market (see mfa_engine.systems.ev_battery
+and app.py), where the cumulative version of this comparison produced a
+share over 1000%, mathematically consistent with the inputs but not a
+meaningful claim. Comparing one real year against another is the fix.
 """
 import sys
 import warnings
@@ -35,6 +46,7 @@ from mfa_engine.systems.wind_turbine import load_and_build                      
 wind_model = load_and_build(snapshot=pd.Timestamp("2019-06-30"))
 wind_result = wind_model.run(horizon_year=2050)
 copper_by_year = wind_result["secondary_materials"].set_index("year")["copper"]
+copper_annualized = pd.Series([float(copper_by_year.mean())])
 
 # --- 2. Real economic side: crm-trade-network's own real copper analysis --
 from build import load_edges, bilateral, unified_edges   # noqa: E402
@@ -70,9 +82,11 @@ COPPER_PRICE_USD_PER_TONNE = 12_842.0
 PRICE_SOURCE = "2026 average LME copper price, Trading Economics / MacroMicro, checked live"
 
 result = recovery_vs_disruption(
-    material_tonnes_by_year=copper_by_year,
+    material_tonnes_by_year=copper_annualized,
     price_usd_per_tonne=COPPER_PRICE_USD_PER_TONNE,
     price_source=PRICE_SOURCE,
     risk=risk,
 )
 print_report(result)
+print(f"\n(For context, real cumulative recovery through 2050: {copper_by_year.sum():,.1f} t, "
+      f"not used in the comparison above, see this script's own docstring for why.)")

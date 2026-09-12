@@ -259,6 +259,61 @@ def implied_unit_price(edges: pd.DataFrame) -> float | None:
     return float(total_usd / (total_kg / 1000))
 
 
+@st.cache_data(show_spinner="Computing the cross-material comparison (real data for all six materials)...")
+def compute_all_material_scenarios(horizon_year: int) -> pd.DataFrame:
+    """The same recovery_vs_disruption calculation the sidebar runs for
+    whichever one material is currently selected, run for all six at once,
+    each against its own real top single supplier. Lets a viewer see which
+    of these real recovery pathways matters most, relatively, without
+    clicking through six separate dropdown states one at a time."""
+    rows = []
+    for name, g in MATERIAL_GROUPS.items():
+        try:
+            conc, edges = load_commodity_trade(g["hs_code"])
+        except ValueError:
+            continue
+        _, result = run_system_model(g["system"], horizon_year)
+        total_usd = float(edges.value_usd.sum())
+        top1 = conc["top1"]
+        no_slack = compute_cascade(edges, top1, 0.0)
+        slack20 = compute_cascade(edges, top1, 0.2)
+        share = no_slack["lost_usd"] / total_usd if total_usd else 0.0
+
+        if g["price_mode"] == "external":
+            price, price_source = g["external_price"], g["external_price_source"]
+        else:
+            implied = implied_unit_price(edges)
+            price, price_source = (implied or 0.0), "implied 2023 UN Comtrade unit value"
+
+        mat_by_year = result["secondary_materials"].set_index("year")[g["physical_columns"]].sum(axis=1)
+        mat_by_year = mat_by_year[mat_by_year.index <= horizon_year]
+        # Annualized, not cumulative: the real cascade shortfall is a one-year disruption
+        # estimate, so it must be compared against one typical year of this recovery pathway,
+        # not everything a system will ever recover by an arbitrary horizon year. See the same
+        # comment where this connector is called for the currently-selected material for the
+        # real failure mode this avoids (a >1000% "coverage" share for smaller global markets).
+        annualized = pd.Series([float(mat_by_year.mean())]) if len(mat_by_year) else pd.Series([0.0])
+
+        if no_slack["shortfall_usd"] <= 0 or slack20["shortfall_usd"] <= 0:
+            rows.append({"material": name, "top1": top1, "top1_share": share,
+                         "coverage_no_slack": None, "coverage_20pct": None})
+            continue
+
+        risk = TradeConcentrationRisk(
+            commodity_hs_code=g["hs_code"], commodity_name=g["name"], total_trade_usd=total_usd,
+            hhi=float(conc["hhi"]), top1_country=top1, top1_share=share,
+            cascade_country_removed=top1, cascade_shortfall_usd_no_slack=no_slack["shortfall_usd"],
+            cascade_shortfall_usd_20pct_slack=slack20["shortfall_usd"],
+        )
+        res = recovery_vs_disruption(annualized, price, price_source, risk)
+        rows.append({
+            "material": name, "top1": top1, "top1_share": share,
+            "coverage_no_slack": res["recovered_share_of_no_slack_shortfall"],
+            "coverage_20pct": res["recovered_share_of_20pct_slack_shortfall"],
+        })
+    return pd.DataFrame(rows)
+
+
 @st.cache_data(show_spinner=False)
 def cache_freshness(year: int, cmd: str) -> dict:
     """Real mtimes of the on-disk cache files this dashboard actually reads,
@@ -398,6 +453,20 @@ risk = TradeConcentrationRisk(
 )
 
 material_by_year = system_result["secondary_materials"].set_index("year")[group["physical_columns"]].sum(axis=1)
+material_by_year = material_by_year[material_by_year.index <= horizon_year]
+cumulative_recovered_tonnes = float(material_by_year.sum())
+# The real cascade shortfall is a one-year disruption estimate (2023 trade removed for a
+# year), but material_by_year spans the whole projection horizon (potentially 25+ years).
+# Comparing a multi-decade cumulative recovery total against a single year's shortfall is a
+# real, demonstrated failure mode, not a hypothetical one: for the global EV fleet, cumulative
+# graphite recovery through 2050 came out to over 1000% of one year's real trade-disruption
+# cost, mathematically consistent with the inputs but not a meaningful claim, since it silently
+# compares quantities on two different time scales. Denmark's wind fleet never crossed 1% here
+# only because its market is tiny; the underlying mismatch was there the whole time. The fix is
+# to compare like with like: an average YEAR of this recovery pathway against one real year of
+# disruption, not everything ever recovered by an arbitrary horizon year against one year.
+average_annual_tonnes = float(material_by_year.mean()) if len(material_by_year) else 0.0
+annualized_series = pd.Series([average_annual_tonnes])
 
 no_slack_shortfall = cascade_no_slack["shortfall_usd"]
 slack_shortfall = cascade_20pct["shortfall_usd"]
@@ -413,7 +482,7 @@ elif slack_shortfall <= 0:
     connector_result = None
     scenario_note = ("slack_covers_it", no_slack_shortfall)
 else:
-    connector_result = recovery_vs_disruption(material_by_year, price, price_source, risk)
+    connector_result = recovery_vs_disruption(annualized_series, price, price_source, risk)
     scenario_note = None
 
 # --------------------------------------------------------------------------- header
@@ -658,14 +727,27 @@ with tab_risk:
         )
     else:
         r = connector_result
+        st.caption(
+            f"Cumulative {material_choice.lower()} recovered by {horizon_year} (all years, for real "
+            f"context): {cumulative_recovered_tonnes:,.0f} t, ${cumulative_recovered_tonnes * price / 1e6:,.1f} M "
+            f"at ${price:,.0f}/t. The comparison below deliberately does **not** use that number, see why underneath."
+        )
         c1, c2, c3 = st.columns(3)
-        c1.metric(f"Recovered value ({material_choice.lower()}, to horizon)", f"${r['cumulative_recovered_usd']/1e6:,.1f} M")
-        c2.metric("Shortfall, no substitution", f"${r['real_shortfall_usd_no_slack']/1e9:,.2f} bn")
-        c3.metric("Shortfall, 20% slack", f"${r['real_shortfall_usd_20pct_slack']/1e9:,.2f} bn")
+        c1.metric(f"Average annual recovery ({material_choice.lower()})", f"${r['cumulative_recovered_usd']/1e6:,.1f} M/yr")
+        c2.metric("Shortfall, no substitution (1 year)", f"${r['real_shortfall_usd_no_slack']/1e9:,.2f} bn")
+        c3.metric("Shortfall, 20% slack (1 year)", f"${r['real_shortfall_usd_20pct_slack']/1e9:,.2f} bn")
+        st.caption(
+            "Both the shortfall figures and \"average annual recovery\" describe one year, on purpose: "
+            "the real cascade shortfall is a one-year disruption estimate, so comparing it against "
+            "everything a technology system will ever recover by some arbitrary horizon year would "
+            "compare two different time scales and can produce a share over 100% for smaller markets, "
+            "not because recycling is winning, but because decades of accumulated recovery were being "
+            "measured against a single year's cost. This engine compares one real year against another."
+        )
 
         fig4 = go.Figure(go.Bar(
             x=[r["cumulative_recovered_usd"], r["real_shortfall_usd_20pct_slack"], r["real_shortfall_usd_no_slack"]],
-            y=[f"Recovered ({material_choice.lower()})", "Shortfall (20% slack)", "Shortfall (no substitution)"],
+            y=[f"Recovered/yr ({material_choice.lower()})", "Shortfall (20% slack)", "Shortfall (no substitution)"],
             orientation="h",
             marker_color=["#5EEAD4", "#F59E0B", "#F472B6"],
             text=[f"${v/1e6:,.1f} M" if v < 1e9 else f"${v/1e9:,.2f} bn"
@@ -686,13 +768,95 @@ with tab_risk:
         st.plotly_chart(fig4, width="stretch")
 
         st.markdown(
-            f"This recovery covers **{r['recovered_share_of_no_slack_shortfall']:.2%}** of the "
-            f"no-substitution shortfall and **{r['recovered_share_of_20pct_slack_shortfall']:.2%}** "
-            "of the 20%-slack shortfall. This is a small, honest ratio, not a claim that recycling "
+            f"In an average year, this recovery covers **{r['recovered_share_of_no_slack_shortfall']:.2%}** "
+            f"of one year's no-substitution shortfall and **{r['recovered_share_of_20pct_slack_shortfall']:.2%}** "
+            "of one year's 20%-slack shortfall. Whether that ratio is small or substantial varies "
+            "genuinely by material, copper and rare earths land under 0.1% here, graphite closer to "
+            "40-50%, since graphite's real global trade is a much smaller market for this same "
+            "recovery pathway to be measured against. Either way it is not a claim that recycling "
             "solves supply concentration; it answers whether this specific real recovery pathway "
-            "matters at the scale of a real measured disruption, and by how much."
+            "matters at the scale of a real measured disruption, and by how much, for this material "
+            "specifically."
         )
         st.caption(f"Price source: {r['price_source']}. Risk source: {risk.source}.")
+
+        st.markdown(f"**With recycling vs. without (one average year)**")
+        no_slack_total = r["real_shortfall_usd_no_slack"]
+        slack_total = r["real_shortfall_usd_20pct_slack"]
+        covered_no_slack = min(r["cumulative_recovered_usd"], no_slack_total)
+        covered_slack = min(r["cumulative_recovered_usd"], slack_total)
+        fig5 = go.Figure()
+        fig5.add_trace(go.Bar(
+            name="Covered by this recycling pathway",
+            x=[covered_no_slack, covered_slack],
+            y=["No substitution", "20% slack"],
+            orientation="h", marker_color="#5EEAD4",
+        ))
+        fig5.add_trace(go.Bar(
+            name="Shortfall remaining even with recycling",
+            x=[no_slack_total - covered_no_slack, slack_total - covered_slack],
+            y=["No substitution", "20% slack"],
+            orientation="h", marker_color="#F472B6",
+        ))
+        fig5.update_layout(
+            template="plotly_dark", paper_bgcolor="#0B0E11", plot_bgcolor="#0B0E11",
+            barmode="stack", xaxis_title="USD", height=240,
+            margin=dict(t=10, l=10, r=20, b=40), legend=dict(orientation="h", y=1.3),
+        )
+        st.plotly_chart(fig5, width="stretch")
+        st.caption(
+            "Same two shortfall totals as above, but stacked instead of separate: the teal sliver is "
+            "what recycling actually covers, the pink is what's still short even after it. Deliberately "
+            "linear, not log scale, so the sliver's real size relative to the whole shortfall is honest, "
+            "even though that means it may be barely visible, which is itself the finding."
+        )
+
+    st.divider()
+    st.subheader("How this compares across all six materials")
+    st.caption(
+        "The same calculation above, run once for each material against its own real largest "
+        "supplier (not necessarily the supplier currently selected above), so you can see which of "
+        "these six real recovery pathways matters most, relatively, without switching the dropdown "
+        "six times."
+    )
+    all_scenarios = compute_all_material_scenarios(horizon_year)
+    plottable = all_scenarios.dropna(subset=["coverage_no_slack", "coverage_20pct"])
+    skipped = all_scenarios[all_scenarios.coverage_no_slack.isna()]
+
+    if not plottable.empty:
+        fig6 = go.Figure()
+        fig6.add_trace(go.Bar(
+            name="No substitution", y=plottable.material, x=plottable.coverage_no_slack,
+            orientation="h", marker_color="#F472B6",
+            text=[f"{v:.2%}" for v in plottable.coverage_no_slack], textposition="outside",
+        ))
+        fig6.add_trace(go.Bar(
+            name="20% slack", y=plottable.material, x=plottable.coverage_20pct,
+            orientation="h", marker_color="#F59E0B",
+            text=[f"{v:.2%}" for v in plottable.coverage_20pct], textposition="outside",
+        ))
+        fig6.update_layout(
+            template="plotly_dark", paper_bgcolor="#0B0E11", plot_bgcolor="#0B0E11",
+            barmode="group", xaxis_title="Share of one year's real shortfall an average year of this recovery pathway covers",
+            xaxis_tickformat=".1%", height=80 + 70 * len(plottable),
+            margin=dict(t=10, l=10, r=60, b=40), legend=dict(orientation="h", y=1.15),
+        )
+        st.plotly_chart(fig6, width="stretch")
+        st.caption(
+            "Each material removes its own real largest supplier (" +
+            "; ".join(f"{row.material}: {row.top1} ({row.top1_share:.1%})" for row in plottable.itertuples()) +
+            "). Average annual recovery vs. one year's shortfall, the two figures being compared "
+            "describe the same one-year time scale on purpose (see the caption above the risk "
+            "connector's own chart for why). Graphite's real global trade is a small enough market "
+            "that its ratio lands far higher than copper's or the rare earths', that is a genuine "
+            "difference between real markets, not an error. None of these is a claim that recycling "
+            "solves supply concentration."
+        )
+    if not skipped.empty:
+        st.caption(
+            "Not shown (removing that material's own largest supplier doesn't produce a comparable "
+            "shortfall in this dataset): " + ", ".join(skipped.material.tolist())
+        )
 
     st.subheader(f"Sankey: real {group['name']} trade flows among the largest players")
     N_TRADE_NODES = 8
