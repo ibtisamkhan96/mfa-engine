@@ -1,6 +1,15 @@
-pandas>=2.0
+pandas>=2.0,<3.0
+# <3.0 is deliberate, not a floor left unbounded: pandas 3.0 raises a TypeError on a
+# pd.NA-into-bool-column assignment in dk-wind-mfa's own load.py that works fine under
+# 2.x, the major version this project has actually been tested against. Found via a
+# real Docker build, not a hypothetical.
 numpy>=1.24
 scipy>=1.10
 streamlit>=1.50
 plotly>=6.0
 networkx>=3.0
+xlrd>=2.0
+# xlrd isn't imported anywhere in this repo: it's dk-wind-mfa's own real dependency
+# (reading a legacy .xls register with pd.read_excel), needed here because Streamlit
+# Community Cloud only installs from this one requirements.txt, not dk-wind-mfa's own,
+# unlike the Dockerfile, which installs all three real requirements.txt files.

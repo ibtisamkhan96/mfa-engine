@@ -32,7 +32,9 @@ more than one system to this risk data in the first place.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -80,6 +82,33 @@ DK_WIND_MFA_SRC = Path(os.environ.get(
 CRM_TRADE_NETWORK_SRC = Path(os.environ.get(
     "CRM_TRADE_NETWORK_SRC", r"F:\job applications claude\crm-trade-network\src"
 ))
+
+# Streamlit Community Cloud only clones the one repo it's pointed at, with no build
+# step of its own to run the Dockerfile's git clone in. So if neither the env var
+# (Docker/Railway) nor the local dev path (this machine) resolves to a real checkout,
+# clone both real, public sibling repos straight from GitHub into a cache directory at
+# import time instead, and point the two path variables there. A shallow, idempotent
+# clone of two small repos (data included) takes seconds, and re-runs harmlessly on
+# every cold start since it skips straight past an already-populated directory.
+def _ensure_cloned(repo_url: str, dest: Path) -> None:
+    if (dest / ".git").exists():
+        return
+    subprocess.run(["git", "clone", "--depth", "1", repo_url, str(dest)], check=True)
+
+
+if not (DK_WIND_MFA_SRC / "load.py").exists() or not (CRM_TRADE_NETWORK_SRC / "build.py").exists():
+    _cache = Path(tempfile.gettempdir()) / "mfa-engine-deps"
+    try:
+        if not (DK_WIND_MFA_SRC / "load.py").exists():
+            _dk_dir = _cache / "dk-wind-mfa"
+            _ensure_cloned("https://github.com/ibtisamkhan96/dk-wind-mfa.git", _dk_dir)
+            DK_WIND_MFA_SRC = _dk_dir / "src"
+        if not (CRM_TRADE_NETWORK_SRC / "build.py").exists():
+            _crm_dir = _cache / "crm-trade-network"
+            _ensure_cloned("https://github.com/ibtisamkhan96/crm-trade-network.git", _crm_dir)
+            CRM_TRADE_NETWORK_SRC = _crm_dir / "src"
+    except Exception:
+        pass   # check_dependencies() below reports this plainly rather than crashing here
 
 
 def check_dependencies() -> None:

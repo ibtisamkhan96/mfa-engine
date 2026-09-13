@@ -103,6 +103,29 @@ supplies `$PORT` at runtime (the `CMD` already reads it), no extra
 configuration needed. Connecting the GitHub repo means a future push here
 redeploys automatically.
 
+## Running it on Streamlit Community Cloud
+
+Streamlit Community Cloud clones only this one repo and never runs the
+`Dockerfile`, so the two sibling dependencies can't be provided the same
+way. `app.py` handles this itself: if `DK_WIND_MFA_SRC`/
+`CRM_TRADE_NETWORK_SRC` aren't set and no local sibling checkout exists, it
+shallow-clones both real, public repos straight from GitHub into a cache
+directory at import time, before falling through to the same
+`check_dependencies()` used everywhere else. `requirements.txt` includes
+`xlrd` for exactly this path (dk-wind-mfa's own real dependency for reading
+its register's legacy `.xls` file, otherwise only installed via its own
+`requirements.txt`, which Streamlit Cloud never looks at).
+
+Verified with an actual simulation of Streamlit Cloud's own constraints,
+not just written and assumed: a bare `python:3.11-slim` container, only
+this repo mounted (no sibling folders visible, no Dockerfile run), a plain
+`pip install -r requirements.txt`, then `streamlit run app.py`. It cloned
+both sibling repos on the fly and produced identical numbers to local dev
+and the Docker path.
+
+To deploy: share.streamlit.io &rarr; New app &rarr; point it at this repo
+and `app.py`. No secrets or extra configuration needed.
+
 ## Verification
 
 ```bash
