@@ -133,7 +133,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(DK_WIND_MFA_SRC))
 sys.path.insert(0, str(CRM_TRADE_NETWORK_SRC))
 
-from mfa_engine import TradeConcentrationRisk, recovery_vs_disruption  # noqa: E402
+from mfa_engine import (  # noqa: E402
+    TradeConcentrationRisk, recovery_vs_disruption,
+    minimum_diversification, EU_CRMA_TARGET_SHARE, EU_CRMA_SOURCE,
+)
 from mfa_engine.systems.wind_turbine import load_and_build as load_wind  # noqa: E402
 from mfa_engine.systems.ev_battery import load_and_build as load_ev  # noqa: E402
 
@@ -902,10 +905,15 @@ with tab_materials:
                 line=dict(color=palette[0], width=2),
             ))
         else:
+            # No fill here, on purpose: a filled tozeroy area per material looked reasonable with one
+            # line, but with several materials of genuinely different real magnitude (steel in the
+            # hundreds of thousands of tonnes next to copper in the thousands) each fill draws over the
+            # others underneath it, visually erasing the smaller-magnitude lines instead of comparing
+            # them. Plain lines compare real magnitudes honestly regardless of scale difference.
             for i, mat in enumerate(chosen):
                 fig2.add_trace(go.Scatter(
-                    x=mats.year, y=mats[mat], mode="lines", name=mat, fill="tozeroy",
-                    line=dict(color=palette[i % len(palette)]), stackgroup=None,
+                    x=mats.year, y=mats[mat], mode="lines", name=mat,
+                    line=dict(color=palette[i % len(palette)], width=2),
                 ))
         fig2.update_layout(
             template="plotly_dark", paper_bgcolor="#0B0E11", plot_bgcolor="#0B0E11",
@@ -1194,6 +1202,69 @@ with tab_risk:
             "linear, not log scale, so the sliver's real size relative to the whole shortfall is honest, "
             "even though that means it may be barely visible, which is itself the finding."
         )
+
+        st.divider()
+        st.subheader("Minimum-cost supplier diversification")
+        st.caption(
+            "A different question from everything above: not how bad the concentration risk is, but "
+            "how much real trade would actually have to move to fix it. A linear program "
+            "(scipy.optimize.linprog) finds the smallest real reallocation of 2023 export volume across "
+            f"{group['name']}'s real existing suppliers that brings the largest single supplier's share "
+            "down to a target, using the same real spare-capacity assumption (slack) already used "
+            "everywhere else in this connector as the ceiling on how much any supplier could realistically expand into."
+        )
+        target_share = st.slider(
+            "Target: maximum share of trade for any one supplier", min_value=0.10, max_value=0.90,
+            value=EU_CRMA_TARGET_SHARE, step=0.05, format="%d%%",
+            help=EU_CRMA_SOURCE,
+            key=f"target_share_{material_choice}",
+        )
+        div_no_slack = minimum_diversification(commodity_edges, target_share, 0.0)
+        div_slack = minimum_diversification(commodity_edges, target_share, 0.20)
+
+        dc1, dc2 = st.columns(2)
+        dc1.metric(
+            "Reallocation needed, no substitution",
+            f"${div_no_slack.reallocated_usd/1e6:,.1f} M" if div_no_slack.feasible else "Not achievable",
+        )
+        dc2.metric(
+            "Reallocation needed, 20% slack",
+            f"${div_slack.reallocated_usd/1e6:,.1f} M" if div_slack.feasible else "Not achievable",
+        )
+        st.latex(
+            r"\min \sum_i d_i \ \text{s.t.}\ \sum_i x_i = T,\ |x_i - c_i| \le d_i,\ "
+            r"0 \le x_i \le \min(\text{target}\cdot T,\ c_i(1+\text{slack}))"
+        )
+        st.caption(
+            "c_i is each real supplier's current 2023 export value, x_i its reallocated value, d_i how "
+            "much that changes either way, T the real total trade value (conserved, not grown or shrunk). "
+            "At 0% slack every supplier's ceiling collapses to exactly its own current volume, so if the "
+            "current top share already exceeds the target, no reallocation is mathematically possible at "
+            "all, a real finding about why spare capacity matters, not a bug."
+        )
+
+        if div_slack.feasible and div_slack.after is not None:
+            top_n = 8
+            before_top = div_slack.before.head(top_n)
+            after_aligned = div_slack.after.reindex(before_top.index)
+            fig_div = go.Figure()
+            fig_div.add_trace(go.Bar(
+                name="Real current (2023)", y=before_top.index, x=before_top.values,
+                orientation="h", marker_color="#F472B6",
+            ))
+            fig_div.add_trace(go.Bar(
+                name=f"After (target {target_share:.0%}, 20% slack)", y=before_top.index,
+                x=after_aligned.values, orientation="h", marker_color="#5EEAD4",
+            ))
+            fig_div.update_layout(
+                template="plotly_dark", paper_bgcolor="#0B0E11", plot_bgcolor="#0B0E11",
+                barmode="group", xaxis_title="USD", height=80 + 40 * len(before_top),
+                margin=dict(t=20, l=10, r=20, b=40), legend=dict(orientation="h", y=1.15),
+            )
+            st.plotly_chart(fig_div, width="stretch")
+            st.caption(div_slack.note)
+        else:
+            st.info(div_slack.note)
 
     st.divider()
     st.subheader("How this compares across all seven materials")

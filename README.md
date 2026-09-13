@@ -40,6 +40,19 @@ without modifying it beyond one additive method
 individual censored data of their own), is the actual test of "modular and
 reusable," not just an assertion.
 
+**One optimization layer** (`mfa_engine/diversification.py`): a real linear
+program (`scipy.optimize.linprog`) answering a different question than the
+rest of the connector, not how concentrated a material's supply is, but the
+minimum real disruption (least 2023 trade reallocated) needed to bring it
+under a target, using the same real spare-capacity (`slack`) assumption
+already used elsewhere as the ceiling on how much any real supplier could
+realistically absorb. The default target (65%) is not an invented round
+number: it is the EU Critical Raw Materials Act's own real, adopted
+benchmark (Regulation (EU) 2024/1252, Article 5(1)(b)). A real, useful
+degenerate case falls out of the formulation for free: at zero slack, no
+reallocation is ever mathematically possible, the model's own way of
+saying diversification requires real spare capacity to diversify into.
+
 **One connector** (`mfa_engine/supply_risk_context.py`): compares either
 system's real projected material recovery against
 [crm-trade-network](../crm-trade-network)'s real 2023 UN Comtrade
@@ -131,6 +144,7 @@ and `app.py`. No secrets or extra configuration needed.
 ```bash
 python tests/test_reproduces_dk_wind_mfa.py   # exact match against dk-wind-mfa's published numbers
 python tests/test_ev_battery_mfa.py           # sanity checks against the real NHTSA/CRS/GREET sources
+python tests/test_diversification.py          # LP respects its own constraints against real trade data
 ```
 
 ## What this honestly is not
