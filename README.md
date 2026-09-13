@@ -77,6 +77,32 @@ streamlit run app.py
 Requires `dk-wind-mfa` and `crm-trade-network` as sibling directories (the
 app checks for them on startup and says so plainly if they're missing).
 
+## Running it as a container
+
+```bash
+docker build -t mfa-engine .
+docker run -p 8501:8501 mfa-engine
+```
+
+The `Dockerfile` clones both real sibling repos from their own public GitHub
+URLs at build time (a container has no "sibling folder", so `app.py` reads
+`DK_WIND_MFA_SRC`/`CRM_TRADE_NETWORK_SRC` from the environment when set,
+falling back to the local sibling-directory convention otherwise). Verified
+by an actual build and run, not just written and assumed: the container
+serves the full dashboard, including the live UN Comtrade-backed risk
+connector, identically to local dev. One real thing this caught: an
+unpinned `pandas>=2.0` resolves to the newest 3.x release in a fresh image,
+which breaks a `pd.NA`-into-a-bool-column assignment in dk-wind-mfa's own
+`load.py` that works fine under the pandas 2.x this whole project has
+actually been tested against, so the Dockerfile pins `pandas<3.0`
+explicitly rather than silently taking on an untested major version.
+
+Deploys to Railway straight from this `Dockerfile`: create a new Railway
+project from this GitHub repo, Railway auto-detects the `Dockerfile` and
+supplies `$PORT` at runtime (the `CMD` already reads it), no extra
+configuration needed. Connecting the GitHub repo means a future push here
+redeploys automatically.
+
 ## Verification
 
 ```bash

@@ -31,6 +31,7 @@ more than one system to this risk data in the first place.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -67,8 +68,18 @@ st.markdown(
 
 # --------------------------------------------------------------------------- dependencies
 
-DK_WIND_MFA_SRC = Path(r"F:\job applications claude\dk-wind-mfa\src")
-CRM_TRADE_NETWORK_SRC = Path(r"F:\job applications claude\crm-trade-network\src")
+# Local dev keeps the original assumption (both sibling repos checked out next to this
+# one, the layout every real command in this session's history has used). A container
+# deploy (Dockerfile clones both real GitHub repos to /deps/ at build time, see the
+# Dockerfile's own comments) sets these two environment variables instead, since
+# "sibling folder on the same machine" is a local-filesystem convention that has no
+# meaning once this runs somewhere else. Same real code either way, just where it looks.
+DK_WIND_MFA_SRC = Path(os.environ.get(
+    "DK_WIND_MFA_SRC", r"F:\job applications claude\dk-wind-mfa\src"
+))
+CRM_TRADE_NETWORK_SRC = Path(os.environ.get(
+    "CRM_TRADE_NETWORK_SRC", r"F:\job applications claude\crm-trade-network\src"
+))
 
 
 def check_dependencies() -> None:
