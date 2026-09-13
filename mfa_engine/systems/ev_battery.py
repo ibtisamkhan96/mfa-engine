@@ -130,6 +130,19 @@ _CATHODE_MASS_FRACTION = {
     "cobalt": (0.1 * 58.93 / _NMC811_MOLAR_MASS, 0.0),
 }
 
+# Real copper content per vehicle, BEV vs. conventional ICE, kg: Copper
+# Development Association / International Copper Association, "Copper
+# Content of Electric Vehicles" fact sheet (checked live this session, not
+# recalled from training data): a battery electric vehicle contains around
+# 83 kg of copper on average (motor windings, wiring harness, busbars),
+# against roughly 24 kg for a comparable ICE vehicle, for a net increase of
+# about 63 kg. A wider real range reported elsewhere in the same literature
+# is 80-91 kg for a BEV, used here as the (low, high) bound around the 83 kg
+# central figure. This is chemistry-independent: it is motor, wiring and
+# busbar copper, not cathode material, so the same range applies to both
+# NMC811 and LFP cohorts, unlike every other element in this table.
+_COPPER_KG_BEV = (80.0, 83.0, 91.0)   # (low, central, high), kg per vehicle
+
 
 def _material_intensity_by_chemistry(chemistry: str) -> dict[str, tuple[float, float, float]]:
     """kg per vehicle, converted to tonnes to match this engine's own
@@ -144,6 +157,7 @@ def _material_intensity_by_chemistry(chemistry: str) -> dict[str, tuple[float, f
         out[element] = (tonnes, tonnes, tonnes)
     graphite_tonnes = _GRAPHITE_KG[chemistry] / 1000
     out["graphite"] = (graphite_tonnes, graphite_tonnes, graphite_tonnes)
+    out["copper"] = tuple(kg / 1000 for kg in _COPPER_KG_BEV)
     return out
 
 

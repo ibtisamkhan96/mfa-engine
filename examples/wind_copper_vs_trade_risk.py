@@ -12,9 +12,12 @@ pipelines:
 
 The one number that is not itself an output of either pipeline is the
 copper price used to convert tonnes to USD so the two can be compared in
-the same unit, and that price is explicitly cited rather than assumed:
-2026 average LME copper price, approximately 12,842 USD/t (Trading
-Economics / MacroMicro market data, checked live while building this).
+the same unit, and that price is explicitly cited rather than assumed, and
+matched to the same 2023 year crm-trade-network's own trade data reflects:
+World Bank Commodity Markets, June 2023 monthly average refined copper
+price, $8,396.5/t (real 2023 LME spot prices ranged from about $7,850/t in
+mid-October to about $9,360/t on January 23, checked live while building
+this, the same real range app.py shows for this same material).
 
 The recovery series fed to the connector is annualized (mean tonnes per
 year), not summed across the whole 2020-2050 projection, on purpose: the
@@ -78,8 +81,9 @@ risk = TradeConcentrationRisk(
 )
 
 # --- 3. The new connection: physical recovery vs. real disruption risk ----
-COPPER_PRICE_USD_PER_TONNE = 12_842.0
-PRICE_SOURCE = "2026 average LME copper price, Trading Economics / MacroMicro, checked live"
+COPPER_PRICE_USD_PER_TONNE = 8_396.5
+PRICE_SOURCE = ("World Bank Commodity Markets, June 2023 monthly average refined copper price, "
+                "matching the 2023 UN Comtrade trade year (real 2023 range: ~$7,850-$9,360/t)")
 
 result = recovery_vs_disruption(
     material_tonnes_by_year=copper_annualized,

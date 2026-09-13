@@ -46,14 +46,26 @@ system's real projected material recovery against
 concentration (HHI) and single-supplier cascade-shortfall analysis. Covers
 every material either physical system actually contains that also has a
 real, trackable UN Comtrade code: copper and rare earth metals (wind
-turbines), lithium, nickel, cobalt and graphite (EV batteries).
+turbines), copper, lithium, nickel, cobalt and graphite (EV batteries).
+Copper is tracked from both systems on purpose, the one material both real
+case studies actually contain, so the connector can show genuine
+cross-technology material competition for the same real recovered tonne,
+not just a single system's own numbers in isolation.
 
-**One dashboard** (`app.py`, Streamlit): both systems, all six materials,
-a Kaplan-Meier/Weibull survival chart, a real confidence band on secondary
-material output (propagating the real low/high ranges `material_intensity()`
-reports rather than collapsing to a point estimate), Sankey diagrams for
-both the physical flow and the trade network, and the risk connector itself,
-with a live "fetch real data now" control against UN Comtrade.
+**One dashboard** (`app.py`, Streamlit): both systems, all seven
+material/system combinations, a Kaplan-Meier/Weibull survival chart, a real
+confidence band on secondary material output (propagating the real
+low/high ranges `material_intensity()` reports rather than collapsing to a
+point estimate), Sankey diagrams for both the physical flow and the trade
+network, a year-by-year (not just averaged) recovery-vs-shortfall chart
+with the real peak retirement year surfaced alongside the average, real
+(low, central, high) price ranges (external citations where the traded
+product genuinely matches a real market benchmark, disclosed context
+instead of a forced range where it doesn't), and the risk connector
+itself, with a live "fetch real data now" control against UN Comtrade.
+Every chart carries its own caption with the actual formula it plots and
+how that number is measured, and a "how to read this dashboard" section
+walks through the intended reading order.
 
 ## Running it
 
@@ -81,3 +93,21 @@ one), and the risk side is a single real 2023 snapshot rather than a
 multi-year trend (crm-trade-network's own fetcher supports other years, but
 a full second year is hundreds of rate-limited live UN Comtrade calls, real
 hours of wall-clock time, not something to trigger casually).
+
+Denmark's wind fleet is modeled nationally, the global EV fleet globally,
+a deliberate consequence of which real data actually exists for each
+technology today (a national register with real per-unit retirement data
+for wind; only global-level sales and chemistry-mix reporting for EVs), not
+an accident, see the dashboard's own "What this app actually is" expander
+for the full reasoning.
+
+Price is given a real (low, central, high) range for copper, lithium and
+nickel, where the traded product genuinely matches a real, dated market
+benchmark. For cobalt, graphite and rare earth metals, the best real
+benchmarks found either price a different-grade product than what the UN
+Comtrade code actually blends, or (rare earths) would need weighting four
+elements' very different real prices by their own physical tonnage share to
+combine into one basket figure. Rather than force a range that wouldn't
+honestly bracket the real data-derived central estimate, those three show
+the real benchmark as disclosed context instead, a real, known gap, not a
+silently dropped one.

@@ -47,6 +47,12 @@ def main():
          result["secondary_materials"].graphite.sum() > result["secondary_materials"].lithium.sum()),
         ("LFP cohorts show zero nickel (real: LiFePO4 has no nickel)",
          model.material_intensity("LFP")["nickel"][1] == 0.0),
+        ("copper content is chemistry-independent (real: motor/wiring copper, "
+         "not cathode-related), same for NMC811 and LFP",
+         model.material_intensity("NMC811")["copper"] == model.material_intensity("LFP")["copper"]),
+        ("copper content per vehicle (83 kg central) exceeds lithium content "
+         "per vehicle (real: copper is the larger of the two by mass)",
+         result["secondary_materials"].copper.sum() > result["secondary_materials"].lithium.sum()),
     ]
 
     print(f"{'check':<85}{'status':>10}")
