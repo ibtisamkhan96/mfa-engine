@@ -53,6 +53,17 @@ degenerate case falls out of the formulation for free: at zero slack, no
 reallocation is ever mathematically possible, the model's own way of
 saying diversification requires real spare capacity to diversify into.
 
+**One grounded AI feature** (`mfa_engine/ask.py`): a "ask this dashboard a
+question" box, not a general chatbot bolted on. Claude is given only the
+real numbers already computed for the currently selected material and
+instructed to answer from those alone, and to say so plainly if a
+question asks about something they don't cover, the same "disclose the
+real gap rather than invent an answer" discipline used everywhere else in
+this project, applied to a conversational interface. Bring-your-own-key
+(the same real pattern already live on the
+[battery-electrode-screening-agent](../battery-electrode-screening-agent)
+demo), so no key is stored and no visitor's usage bills another's account.
+
 **One connector** (`mfa_engine/supply_risk_context.py`): compares either
 system's real projected material recovery against
 [crm-trade-network](../crm-trade-network)'s real 2023 UN Comtrade

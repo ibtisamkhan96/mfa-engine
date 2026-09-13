@@ -13,3 +13,6 @@ xlrd>=2.0
 # (reading a legacy .xls register with pd.read_excel), needed here because Streamlit
 # Community Cloud only installs from this one requirements.txt, not dk-wind-mfa's own,
 # unlike the Dockerfile, which installs all three real requirements.txt files.
+anthropic>=0.30
+# For the "ask this dashboard" grounded Q&A feature (mfa_engine/ask.py). Bring-your-own-key,
+# so this adds no cost or key management on the app's own side.

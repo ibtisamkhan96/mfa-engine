@@ -136,6 +136,7 @@ sys.path.insert(0, str(CRM_TRADE_NETWORK_SRC))
 from mfa_engine import (  # noqa: E402
     TradeConcentrationRisk, recovery_vs_disruption,
     minimum_diversification, EU_CRMA_TARGET_SHARE, EU_CRMA_SOURCE,
+    build_context, ask_dashboard,
 )
 from mfa_engine.systems.wind_turbine import load_and_build as load_wind  # noqa: E402
 from mfa_engine.systems.ev_battery import load_and_build as load_ev  # noqa: E402
@@ -1045,6 +1046,9 @@ with tab_risk:
             "figure was originally chosen."
         )
 
+    target_share = div_no_slack = div_slack = None   # only computed in the else branch below; predeclared
+    # here so the grounded Q&A context at the end of this tab can reference them safely either way.
+
     if connector_result is None and scenario_note[0] == "no_exports":
         st.warning(
             f"{removed_country} has no recorded exports of {group['name']} in this dataset, "
@@ -1373,3 +1377,64 @@ with tab_risk:
             "reported export value_usd, taken directly from UN Comtrade as reported, with no "
             "modeling applied."
         )
+
+    st.divider()
+    st.subheader("Ask this dashboard a question")
+    st.caption(
+        "Grounded, not a general chatbot: Claude is given only the real numbers already computed "
+        "above for the currently selected material and told explicitly to answer from those alone, "
+        "and to say so plainly if a question asks about something they don't cover, never to fill "
+        "the gap with general knowledge or an invented figure."
+    )
+    api_key = st.text_input(
+        "Your Anthropic API key", type="password", key="ask_api_key",
+        help="Bring-your-own-key, the same real pattern already live on this project's "
+        "battery-electrode-screening-agent demo: a shared key would mean one visitor's questions "
+        "bill another visitor's account. Used for one call and never stored. Get one at "
+        "console.anthropic.com/settings/keys.",
+    )
+    question = st.text_input(
+        "Your question", key="ask_question",
+        placeholder="e.g. why is graphite's coverage so much higher than copper's?",
+    )
+    if st.button("Ask", key="ask_button"):
+        if not api_key:
+            st.warning("Enter your own Anthropic API key above first.")
+        elif not question:
+            st.warning("Type a question first.")
+        else:
+            context = build_context(
+                material_label=material_choice, system_label=system["label"], horizon_year=horizon_year,
+                hhi=f"{commodity_conc['hhi']:.3f}", top1_country=commodity_conc["top1"],
+                top1_share=f"{commodity_conc['top1_share']:.1%}",
+                removed_country=removed_country, removed_country_share=f"{removed_country_share:.1%}",
+                no_slack_shortfall=f"${no_slack_shortfall/1e9:,.2f} bn",
+                slack_shortfall=f"${slack_shortfall/1e9:,.2f} bn",
+                avg_annual_usd=f"${connector_result['cumulative_recovered_usd']/1e6:,.1f} M/yr" if connector_result else None,
+                peak_year=peak_year,
+                peak_usd=f"${peak_connector_result['cumulative_recovered_usd']/1e6:,.1f} M" if peak_connector_result else None,
+                coverage_no_slack=f"{connector_result['recovered_share_of_no_slack_shortfall']:.2%}" if connector_result else None,
+                coverage_20pct=f"{connector_result['recovered_share_of_20pct_slack_shortfall']:.2%}" if connector_result else None,
+                price=f"${price:,.0f}/t", price_source=price_source,
+                price_range=(f"${price_low_result['recovered_share_of_no_slack_shortfall']:.2%}-"
+                             f"{price_high_result['recovered_share_of_no_slack_shortfall']:.2%} coverage across the "
+                             f"real cited price range") if (price_low_result and price_high_result) else None,
+                target_share=f"{target_share:.0%}" if target_share else None,
+                div_no_slack_note=div_no_slack.note if div_no_slack else None,
+                div_slack_note=div_slack.note if div_slack else None,
+                cross_material_table=(
+                    "; ".join(
+                        f"{row.material}: {row.coverage_no_slack:.2%}/{row.coverage_20pct:.2%} "
+                        "(no-substitution/20%-slack coverage)"
+                        for row in all_scenarios.dropna(subset=["coverage_no_slack"]).itertuples()
+                    ) if not all_scenarios.empty else None
+                ),
+            )
+            try:
+                with st.spinner("Asking Claude, grounded only in the numbers above..."):
+                    answer = ask_dashboard(api_key, question, context)
+                st.markdown(f"**Answer:** {answer}")
+                with st.expander("What was actually sent as context (so you can check it isn't inventing anything)"):
+                    st.code(context, language=None)
+            except Exception as exc:
+                st.error(f"Real error calling the Anthropic API: {exc}")

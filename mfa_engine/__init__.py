@@ -3,6 +3,7 @@ from .supply_risk_context import TradeConcentrationRisk, recovery_vs_disruption,
 from .diversification import (
     minimum_diversification, DiversificationResult, EU_CRMA_TARGET_SHARE, EU_CRMA_SOURCE,
 )
+from .ask import build_context, ask_dashboard, SYSTEM_PROMPT
 
 __all__ = [
     "CohortSurvivalMFA",
@@ -13,4 +14,7 @@ __all__ = [
     "DiversificationResult",
     "EU_CRMA_TARGET_SHARE",
     "EU_CRMA_SOURCE",
+    "build_context",
+    "ask_dashboard",
+    "SYSTEM_PROMPT",
 ]
