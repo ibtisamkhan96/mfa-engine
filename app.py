@@ -1213,12 +1213,18 @@ with tab_risk:
             "down to a target, using the same real spare-capacity assumption (slack) already used "
             "everywhere else in this connector as the ceiling on how much any supplier could realistically expand into."
         )
-        target_share = st.slider(
-            "Target: maximum share of trade for any one supplier", min_value=0.10, max_value=0.90,
-            value=EU_CRMA_TARGET_SHARE, step=0.05, format="%d%%",
+        # Slider kept on an integer percentage-point scale (10-90), not the 0-1 fraction the LP
+        # itself takes: Streamlit's slider `format` is a raw printf-style format applied to the
+        # value as-is, it does not multiply a 0-1 fraction by 100 first, so format="%d%%" on 0.65
+        # displayed "0%" (0.65 truncated to an int), a real, confusing display bug caught by
+        # actually looking at the deployed page, not assumed correct from the code alone.
+        target_share_pct = st.slider(
+            "Target: maximum share of trade for any one supplier", min_value=10, max_value=90,
+            value=int(round(EU_CRMA_TARGET_SHARE * 100)), step=5, format="%d%%",
             help=EU_CRMA_SOURCE,
             key=f"target_share_{material_choice}",
         )
+        target_share = target_share_pct / 100.0
         div_no_slack = minimum_diversification(commodity_edges, target_share, 0.0)
         div_slack = minimum_diversification(commodity_edges, target_share, 0.20)
 

@@ -85,6 +85,23 @@ def minimum_diversification(edges: pd.DataFrame, target_share: float, slack: flo
                                       "No real exporters with nonzero trade to reallocate across.")
 
     c = current.values
+
+    # Trivial-compliance shortcut, checked before touching the solver: if the real current
+    # allocation already respects the target (x_i = c_i satisfies every bound for any slack
+    # >= 0), that is feasible with zero reallocation, mathematically, with no need to ask an
+    # LP solver to find it. This isn't just an optimisation: HiGHS's presolve was found, by
+    # direct testing against real 2023 copper data (133 real suppliers, wide magnitude spread),
+    # to misreport exactly this case as infeasible, a real degenerate-boundary numerical
+    # weakness (every one of 133 variables pinned simultaneously at its own upper bound), even
+    # though x=c was hand-verified to satisfy every constraint exactly. Handling the trivial
+    # case directly sidesteps that fragility entirely rather than trusting the solver with a
+    # corner it demonstrably gets wrong.
+    if float(c.max()) / total <= target_share:
+        return DiversificationResult(
+            True, target_share, slack, total, 0.0, current, current.copy(),
+            f"Feasible with no change: the real current largest supplier's share is already at or "
+            f"below the {target_share:.0%} target, before any reallocation."
+        )
     # Variables z = [x_1..x_n, d_1..d_n]
     obj = np.concatenate([np.zeros(n), np.ones(n)])
 
