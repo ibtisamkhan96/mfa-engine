@@ -53,6 +53,29 @@ degenerate case falls out of the formulation for free: at zero slack, no
 reallocation is ever mathematically possible, the model's own way of
 saying diversification requires real spare capacity to diversify into.
 
+**The `slack` value itself is real and material-specific where that exists,
+disclosed and honest where it doesn't.** A flat 20% "spare capacity" figure
+used to be applied to every material, an assumption crm-trade-network's own
+README already flagged as buried and uncited. Real research changed this:
+copper alone has a citable, published industry-association figure, ICSG's
+2023 real global mine capacity utilization of 77.6%, implying 22.4% real
+spare capacity (republished via Statista, since ICSG's own primary
+publications are subscription-only). No comparable figure exists for
+rare earth metals, lithium, nickel, cobalt or graphite, for real, specific,
+structural reasons documented per material in the dashboard's own "What
+does slack mean" expander, not just "no data found": ~74% of 2023 cobalt
+mine output is a copper byproduct and ~7% a nickel byproduct (USGS Mineral
+Commodity Summaries 2024), and byproduct metals are never mined against
+their own dedicated capacity; China manages rare earth supply through
+administrative mining/separation quotas, so USGS's own reported production
+figure is the quota by construction, no utilization ratio can be derived
+from it; lithium, nickel and graphite have no ICSG-equivalent body
+publishing a capacity-utilization series at all (USGS/INSG publish
+production, reserves and market balance, not capacity). Those five keep
+the same disclosed 20% illustrative assumption, now labeled as exactly
+that rather than presented as though it meant the same thing for every
+material.
+
 **One grounded AI feature** (`mfa_engine/ask.py`): a "ask this dashboard a
 question" box, not a general chatbot bolted on. Claude is given only the
 real numbers already computed for the currently selected material and

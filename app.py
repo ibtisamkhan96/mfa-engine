@@ -174,6 +174,35 @@ SYSTEMS = {
 # 2023 high). This is the same treatment material_intensity() already gives
 # physical content, a real range instead of a single point.
 _COPPER_PRICE_RANGE_2023 = (7_850.0, 8_396.5, 9_360.0)
+
+# Real per-material spare-capacity ("slack") figures, replacing a single flat 20% applied to
+# every material regardless of whether 20% actually means anything for that specific one.
+# crm-trade-network's own README calls 20% a "buried assumption" with no independent citation
+# at all; live research this session found that copper is the ONE material here with a real,
+# published, industry-association capacity-utilization statistic to replace it with. For the
+# other five, the honest finding is not "we didn't look hard enough", each has a real,
+# specific, structural reason no comparable figure is published anywhere:
+#   - Cobalt: ~74% of real 2023 mine output was a copper byproduct (DR Congo) and ~7% a nickel
+#     byproduct (Indonesia), per USGS Mineral Commodity Summaries 2024; byproduct metals are not
+#     mined against their own dedicated capacity, so no cobalt-specific utilization exists.
+#   - Rare earths: China manages supply through administrative mining and separation quotas
+#     (240,000 t / 230,000 t REO respectively in 2023); USGS's own production figure for China
+#     is that same quota by construction, so a utilization ratio cannot be derived from it.
+#   - Lithium, graphite, nickel: no ICSG-equivalent industry body publishes a capacity-utilization
+#     series for any of these the way ICSG does for copper (INSG publishes nickel production and
+#     market balance, e.g. a real 2023 surplus of 163kt, but not capacity; USGS publishes only
+#     production and reserves for lithium and graphite).
+# 20% is kept for those five as the same illustrative, disclosed assumption crm-trade-network's
+# own connector already uses, not silently replaced with an invented material-specific number.
+_COPPER_REAL_SLACK = 0.224
+_COPPER_REAL_SLACK_SOURCE = (
+    "ICSG (International Copper Study Group), 2023 real global copper mine capacity "
+    "utilization: 77.6% (a historic or near-historic low), implying 22.4% real spare capacity, "
+    "republished via Statista; ICSG's own primary publications are subscription-only, so this "
+    "is verified against the originating organization's methodology and republished figure, "
+    "not the primary document itself."
+)
+_DEFAULT_SLACK = 0.20
 _COPPER_PRICE_SOURCE = (
     # Dollar signs escaped (\$) throughout: this string is rendered via st.markdown/st.caption,
     # which auto-renders anything between two literal "$" as LaTeX (Streamlit's KaTeX
@@ -204,6 +233,8 @@ MATERIAL_GROUPS = {
         "external_price": _COPPER_PRICE_RANGE_2023[1],
         "external_price_range": _COPPER_PRICE_RANGE_2023,
         "external_price_source": _COPPER_PRICE_SOURCE,
+        "real_slack": _COPPER_REAL_SLACK,
+        "real_slack_source": _COPPER_REAL_SLACK_SOURCE,
     },
     "Copper (EV batteries)": {
         "system": "ev",
@@ -214,6 +245,8 @@ MATERIAL_GROUPS = {
         "external_price": _COPPER_PRICE_RANGE_2023[1],
         "external_price_range": _COPPER_PRICE_RANGE_2023,
         "external_price_source": _COPPER_PRICE_SOURCE,
+        "real_slack": _COPPER_REAL_SLACK,
+        "real_slack_source": _COPPER_REAL_SLACK_SOURCE,
     },
     "Rare earth metals": {
         "system": "wind",
@@ -238,6 +271,12 @@ MATERIAL_GROUPS = {
         "dated low/high pair, and not combined into one basket figure here since that would require "
         "weighting by each element's own real physical tonnage share, an extra modeling step beyond "
         "what these citations alone support.",
+        "real_slack": _DEFAULT_SLACK,
+        "real_slack_note": "No real capacity-utilization figure exists for rare earths: China manages "
+        "supply through administrative mining and separation quotas (240,000 t / 230,000 t REO in "
+        "2023), and USGS's own reported production for China is that same quota by construction, "
+        "so a real utilization ratio cannot be derived from it (USGS Mineral Commodity Summaries "
+        "2024). 20% remains the same disclosed, illustrative assumption, not a citation.",
     },
     "Lithium": {
         "system": "ev",
@@ -262,6 +301,12 @@ MATERIAL_GROUPS = {
         "collapse from its late-2022 peak. The annual average and the spot low/high come from "
         "different aggregation methods (full-year average vs. specific in-year spot points), "
         "disclosed here rather than presented as if directly comparable.",
+        "real_slack": _DEFAULT_SLACK,
+        "real_slack_note": "No real capacity-utilization figure exists for lithium: no ICSG-equivalent "
+        "industry body publishes one, and USGS Mineral Commodity Summaries 2024 reports only "
+        "production and reserves. Real 2023 spot prices fell over 75% from their late-2022 peak, "
+        "implying real spare capacity existed, but no source publishes a clean percentage for it. "
+        "20% remains the same disclosed, illustrative assumption, not a citation.",
     },
     "Nickel": {
         "system": "ev",
@@ -279,6 +324,12 @@ MATERIAL_GROUPS = {
         "citable_range": (15_885.0, 31_200.0, "Westmetall LME cash-settlement daily data (checked "
                           "live): 2023 calendar-year low \\$15,885/t (27 Nov 2023), high \\$31,200/t "
                           "(3 Jan 2023); cross-checked against an independent source within 0.1%."),
+        "real_slack": _DEFAULT_SLACK,
+        "real_slack_note": "No real capacity-utilization figure exists for nickel: INSG (International "
+        "Nickel Study Group) publishes real production and market-balance data (a real 2023 global "
+        "surplus of 163,000 t, per its own April 2024 release) but not a capacity-utilization series "
+        "the way ICSG does for copper. 20% remains the same disclosed, illustrative assumption, not "
+        "a citation.",
     },
     "Cobalt": {
         "system": "ev",
@@ -299,6 +350,13 @@ MATERIAL_GROUPS = {
         "refined cobalt metal (a higher-value product than the blended mix HS 8105 actually trades) "
         "moved between roughly \\$30,865/t (~Sept 2023 low) and \\$44,092/t (Jan 2023 high) in 2023, "
         "USGS National Minerals Information Center / Cobalt Institute Cobalt Market Report 2023.",
+        "real_slack": _DEFAULT_SLACK,
+        "real_slack_note": "No real capacity-utilization figure exists for cobalt, for a structural "
+        "reason, not a lack of looking: about 74% of real 2023 mine output was a copper byproduct "
+        "(DR Congo) and about 7% a nickel byproduct (Indonesia), per USGS Mineral Commodity "
+        "Summaries 2024. Byproduct metals are not mined against their own dedicated capacity, so no "
+        "cobalt-specific utilization statistic is published anywhere. 20% remains the same "
+        "disclosed, illustrative assumption, not a citation.",
     },
     "Graphite": {
         "system": "ev",
@@ -318,6 +376,13 @@ MATERIAL_GROUPS = {
         "this code's own real blended average, a real grade/product mismatch, not an error): "
         "Fastmarkets' natural flake graphite (94% C, -100 mesh, fob China) benchmark moved between "
         "\\$530-575/t (28 Dec 2023 low) and \\$830/t (5 Jan 2023 high) over 2023.",
+        "real_slack": _DEFAULT_SLACK,
+        "real_slack_note": "No real capacity-utilization figure exists for graphite: USGS Mineral "
+        "Commodity Summaries 2024 reports only production and reserves, and no ICSG-equivalent body "
+        "tracks graphite capacity. The IEA's Global Critical Minerals Outlook 2024 notes only "
+        "qualitatively that anode-grade graphite capacity outside China runs at low utilization, "
+        "with no published percentage. 20% remains the same disclosed, illustrative assumption, "
+        "not a citation.",
     },
 }
 
@@ -444,7 +509,7 @@ def compute_all_material_scenarios(horizon_year: int) -> pd.DataFrame:
         total_usd = float(edges.value_usd.sum())
         top1 = conc["top1"]
         no_slack = compute_cascade(edges, top1, 0.0)
-        slack20 = compute_cascade(edges, top1, 0.2)
+        slack20 = compute_cascade(edges, top1, g["real_slack"])
         share = no_slack["lost_usd"] / total_usd if total_usd else 0.0
 
         if g["price_mode"] == "external":
@@ -464,7 +529,8 @@ def compute_all_material_scenarios(horizon_year: int) -> pd.DataFrame:
 
         if no_slack["shortfall_usd"] <= 0 or slack20["shortfall_usd"] <= 0:
             rows.append({"material": name, "top1": top1, "top1_share": share,
-                         "coverage_no_slack": None, "coverage_20pct": None})
+                         "coverage_no_slack": None, "coverage_20pct": None,
+                         "real_slack": g["real_slack"]})
             continue
 
         risk = TradeConcentrationRisk(
@@ -478,6 +544,7 @@ def compute_all_material_scenarios(horizon_year: int) -> pd.DataFrame:
             "material": name, "top1": top1, "top1_share": share,
             "coverage_no_slack": res["recovered_share_of_no_slack_shortfall"],
             "coverage_20pct": res["recovered_share_of_20pct_slack_shortfall"],
+            "real_slack": g["real_slack"],
         })
     return pd.DataFrame(rows)
 
@@ -646,7 +713,7 @@ with st.sidebar.expander("Fetch live data now"):
 
 system_model, system_result = run_system_model(group["system"], horizon_year)
 cascade_no_slack = compute_cascade(commodity_edges, removed_country, 0.0)
-cascade_20pct = compute_cascade(commodity_edges, removed_country, 0.2)
+cascade_20pct = compute_cascade(commodity_edges, removed_country, group["real_slack"])
 removed_country_share = cascade_no_slack["lost_usd"] / total_trade_usd if total_trade_usd else 0.0
 
 risk = TradeConcentrationRisk(
@@ -1025,7 +1092,8 @@ with tab_risk:
         f"**Scenario:** remove **{removed_country}** as a supplier of {group['name']}, "
         f"{removed_country_share:.1%} of real 2023 trade by value."
     )
-    with st.expander("What does \"20% slack\" actually mean, and where does 20% come from?"):
+    _slack_pct_label = f"{group['real_slack']:.1%}"
+    with st.expander(f"What does \"{_slack_pct_label} slack\" actually mean for {short_material.lower()}, and where does it come from?"):
         st.latex(
             r"\text{shortfall} = \max\!\Big(0,\ \text{removed country's exports} - \text{slack}"
             r"\times \sum_{\text{survivors}} \text{their exports}\Big)"
@@ -1034,17 +1102,18 @@ with tab_risk:
             "Survivors (every supplier except the one removed) can each expand output by `slack` "
             "times their own current real exports of this commodity; whatever the removed country "
             "used to supply that this spare capacity still cannot cover is the shortfall. slack=0 is "
-            "the pessimistic no-substitution bound; slack=0.2 allows survivors 20% headroom. "
-            "crm-trade-network's own README calls 20% an explicit, disclosed parameter rather than a "
-            "hidden one, but also states plainly that the specific value 20% itself has no independent "
-            "citation in that project, it is a deliberately round illustrative number, not fit to data. "
-            "That gap is not silently inherited here: Statista's reported 2023 global copper mine "
-            "capacity utilization rate was 77.6%, implying roughly 22.4% real average spare capacity "
-            "that year, real-world evidence in the same ballpark as 20%, for one of the seven materials "
-            "this dashboard covers. That is presented as an honest consistency check against one real "
-            "industry figure, not as proof 20% is correct for every commodity or that this is how the "
-            "figure was originally chosen."
+            f"always the pessimistic no-substitution bound; slack={group['real_slack']:.3f} allows "
+            f"survivors {_slack_pct_label} headroom for {short_material.lower()} specifically, not "
+            "the same flat 20% applied to every material regardless of whether 20% means anything "
+            "for that one. crm-trade-network's own README calls 20% an explicit, disclosed parameter "
+            "rather than a hidden one, but also states plainly that the specific value has no "
+            "independent citation in that project, a deliberately round illustrative number, not "
+            "fit to data."
         )
+        if "real_slack_source" in group:
+            st.caption(f"**Real, cited figure used for {short_material.lower()}:** {group['real_slack_source']}")
+        elif "real_slack_note" in group:
+            st.caption(group["real_slack_note"])
 
     target_share = div_no_slack = div_slack = None   # only computed in the else branch below; predeclared
     # here so the grounded Q&A context filled in further down can reference them safely either way.
@@ -1065,10 +1134,10 @@ with tab_risk:
     elif connector_result is None and scenario_note[0] == "slack_covers_it":
         st.info(
             f"Removing {removed_country} creates a real **\\${scenario_note[1]/1e9:,.2f} bn** "
-            "shortfall with no substitution, but the remaining suppliers' 20% slack fully "
-            f"absorbs it; the 20%-slack shortfall is zero. There is nothing left for the "
-            f"recovered {material_choice.lower()} to offset in that scenario, so no coverage "
-            "percentage is shown."
+            f"shortfall with no substitution, but the remaining suppliers' {group['real_slack']:.1%} "
+            f"slack fully absorbs it; the {group['real_slack']:.1%}-slack shortfall is zero. There is "
+            f"nothing left for the recovered {material_choice.lower()} to offset in that scenario, so "
+            "no coverage percentage is shown."
         )
     else:
         r = connector_result
@@ -1088,7 +1157,7 @@ with tab_risk:
             "elsewhere in this app exists to avoid.",
         )
         c3.metric("Shortfall, no substitution (1 year)", f"${r['real_shortfall_usd_no_slack']/1e9:,.2f} bn")
-        c4.metric("Shortfall, 20% slack (1 year)", f"${r['real_shortfall_usd_20pct_slack']/1e9:,.2f} bn")
+        c4.metric(f"Shortfall, {group['real_slack']:.1%} slack (1 year)", f"${r['real_shortfall_usd_20pct_slack']/1e9:,.2f} bn")
         st.latex(
             r"\text{recovered}_{\$} = \bar{t}_{\text{material}} \times p \qquad"
             r"\text{coverage} = \frac{\text{recovered}_{\$}}{\text{shortfall}_{\$}}"
@@ -1109,14 +1178,14 @@ with tab_risk:
                 f"**{price_low_result['recovered_share_of_no_slack_shortfall']:.2%}-"
                 f"{price_high_result['recovered_share_of_no_slack_shortfall']:.2%}** of the "
                 f"no-substitution shortfall and **{price_low_result['recovered_share_of_20pct_slack_shortfall']:.2%}-"
-                f"{price_high_result['recovered_share_of_20pct_slack_shortfall']:.2%}** of the 20%-slack "
+                f"{price_high_result['recovered_share_of_20pct_slack_shortfall']:.2%}** of the {group['real_slack']:.1%}-slack "
                 f"shortfall, at \\${price_range[0]:,.0f}-\\${price_range[2]:,.0f}/t. The conclusion below "
                 "uses the central price; this range shows how much of it is actually price-sensitive."
             )
 
         fig4 = go.Figure(go.Bar(
             x=[r["cumulative_recovered_usd"], r["real_shortfall_usd_20pct_slack"], r["real_shortfall_usd_no_slack"]],
-            y=[f"Recovered/yr ({material_choice.lower()})", "Shortfall (20% slack)", "Shortfall (no substitution)"],
+            y=[f"Recovered/yr ({material_choice.lower()})", f"Shortfall ({group['real_slack']:.1%} slack)", "Shortfall (no substitution)"],
             orientation="h",
             marker_color=["#5EEAD4", "#F59E0B", "#F472B6"],
             text=[f"${v/1e6:,.1f} M" if v < 1e9 else f"${v/1e9:,.2f} bn"
@@ -1139,7 +1208,7 @@ with tab_risk:
         st.markdown(
             f"In an average year, this recovery covers **{r['recovered_share_of_no_slack_shortfall']:.2%}** "
             f"of one year's no-substitution shortfall and **{r['recovered_share_of_20pct_slack_shortfall']:.2%}** "
-            "of one year's 20%-slack shortfall. Whether that ratio is small or substantial varies "
+            f"of one year's {group['real_slack']:.1%}-slack shortfall. Whether that ratio is small or substantial varies "
             "genuinely by material, copper and rare earths land under 0.1% here, graphite closer to "
             "40-50%, since graphite's real global trade is a much smaller market for this same "
             "recovery pathway to be measured against. Either way it is not a claim that recycling "
@@ -1163,7 +1232,7 @@ with tab_risk:
         )
         fig_yby.add_hline(
             y=r["real_shortfall_usd_20pct_slack"], line=dict(color="#F59E0B", width=1.5, dash="dot"),
-            annotation_text="1-year shortfall, 20% slack", annotation_position="bottom left",
+            annotation_text=f"1-year shortfall, {group['real_slack']:.1%} slack", annotation_position="bottom left",
         )
         if peak_year is not None:
             fig_yby.add_vline(x=peak_year, line=dict(color="#6B7280", width=1, dash="dash"))
@@ -1189,16 +1258,17 @@ with tab_risk:
         covered_no_slack = min(r["cumulative_recovered_usd"], no_slack_total)
         covered_slack = min(r["cumulative_recovered_usd"], slack_total)
         fig5 = go.Figure()
+        slack_label = f"{group['real_slack']:.1%} slack"
         fig5.add_trace(go.Bar(
             name="Covered by this recycling pathway",
             x=[covered_no_slack, covered_slack],
-            y=["No substitution", "20% slack"],
+            y=["No substitution", slack_label],
             orientation="h", marker_color="#5EEAD4",
         ))
         fig5.add_trace(go.Bar(
             name="Shortfall remaining even with recycling",
             x=[no_slack_total - covered_no_slack, slack_total - covered_slack],
-            y=["No substitution", "20% slack"],
+            y=["No substitution", slack_label],
             orientation="h", marker_color="#F472B6",
         ))
         fig5.update_layout(
@@ -1238,7 +1308,7 @@ with tab_risk:
         )
         target_share = target_share_pct / 100.0
         div_no_slack = minimum_diversification(commodity_edges, target_share, 0.0)
-        div_slack = minimum_diversification(commodity_edges, target_share, 0.20)
+        div_slack = minimum_diversification(commodity_edges, target_share, group["real_slack"])
 
         dc1, dc2 = st.columns(2)
         dc1.metric(
@@ -1246,7 +1316,7 @@ with tab_risk:
             f"${div_no_slack.reallocated_usd/1e6:,.1f} M" if div_no_slack.feasible else "Not achievable",
         )
         dc2.metric(
-            "Reallocation needed, 20% slack",
+            f"Reallocation needed, {group['real_slack']:.1%} slack",
             f"${div_slack.reallocated_usd/1e6:,.1f} M" if div_slack.feasible else "Not achievable",
         )
         st.latex(
@@ -1271,7 +1341,7 @@ with tab_risk:
                 orientation="h", marker_color="#F472B6",
             ))
             fig_div.add_trace(go.Bar(
-                name=f"After (target {target_share:.0%}, 20% slack)", y=before_top.index,
+                name=f"After (target {target_share:.0%}, {group['real_slack']:.1%} slack)", y=before_top.index,
                 x=after_aligned.values, orientation="h", marker_color="#5EEAD4",
             ))
             fig_div.update_layout(
@@ -1304,7 +1374,7 @@ with tab_risk:
             text=[f"{v:.2%}" for v in plottable.coverage_no_slack], textposition="outside",
         ))
         fig6.add_trace(go.Bar(
-            name="20% slack", y=plottable.material, x=plottable.coverage_20pct,
+            name="With real spare capacity", y=plottable.material, x=plottable.coverage_20pct,
             orientation="h", marker_color="#F59E0B",
             text=[f"{v:.2%}" for v in plottable.coverage_20pct], textposition="outside",
         ))
@@ -1317,6 +1387,11 @@ with tab_risk:
         st.plotly_chart(fig6, width="stretch")
         st.latex(r"\text{coverage}_{\text{material}} = \frac{\bar{t}_{\text{material}} \times p_{\text{material}}}{\text{shortfall}_{\$,\,\text{material}}}")
         st.caption(
+            "\"With real spare capacity\" uses each material's own real slack, not one flat number: "
+            "copper's is a real, cited 22.4% (ICSG 2023 capacity utilization); the other six use the "
+            "same disclosed 20% illustrative assumption crm-trade-network's own connector already "
+            "uses, since no comparable published figure exists for any of them (see each material's "
+            "own \"What does slack actually mean\" expander above for the specific real reason why). "
             "Each material removes its own real largest supplier (" +
             "; ".join(f"{row.material}: {row.top1} ({row.top1_share:.1%})" for row in plottable.itertuples()) +
             "). Average annual recovery vs. one year's shortfall, the two figures being compared "
@@ -1425,6 +1500,7 @@ with tab_risk:
                     peak_usd=f"${peak_connector_result['cumulative_recovered_usd']/1e6:,.1f} M" if peak_connector_result else None,
                     coverage_no_slack=f"{connector_result['recovered_share_of_no_slack_shortfall']:.2%}" if connector_result else None,
                     coverage_20pct=f"{connector_result['recovered_share_of_20pct_slack_shortfall']:.2%}" if connector_result else None,
+                    real_slack_pct=f"{group['real_slack']:.1%}",
                     price=f"${price:,.0f}/t", price_source=price_source,
                     price_range=(f"${price_low_result['recovered_share_of_no_slack_shortfall']:.2%}-"
                                  f"{price_high_result['recovered_share_of_no_slack_shortfall']:.2%} coverage across the "
@@ -1435,7 +1511,8 @@ with tab_risk:
                     cross_material_table=(
                         "; ".join(
                             f"{row.material}: {row.coverage_no_slack:.2%}/{row.coverage_20pct:.2%} "
-                            "(no-substitution/20%-slack coverage)"
+                            f"(no-substitution/{row.real_slack:.1%}-slack coverage, each material's own real "
+                            "slack figure, not a shared flat rate)"
                             for row in all_scenarios.dropna(subset=["coverage_no_slack"]).itertuples()
                         ) if not all_scenarios.empty else None
                     ),

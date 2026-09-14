@@ -51,15 +51,20 @@ def build_context(**kwargs: object) -> str:
     add("  That supplier's real share of trade", kwargs.get("top1_share"))
     add("  Disruption scenario: supplier removed", kwargs.get("removed_country"))
     add("  That supplier's real share of trade", kwargs.get("removed_country_share"))
+    # The real slack percentage varies per material now (copper: a real, cited 22.4%; every
+    # other material: the same disclosed 20% assumption crm-trade-network's own connector
+    # already uses), so the label itself is built from the real value passed in rather than a
+    # hardcoded "20%" that would be wrong for copper specifically.
+    slack_label = kwargs.get("real_slack_pct") or "real spare capacity"
     add("  Real shortfall, no substitution (1 year)", kwargs.get("no_slack_shortfall"))
-    add("  Real shortfall, 20% slack (1 year)", kwargs.get("slack_shortfall"))
+    add(f"  Real shortfall, {slack_label} slack (1 year)", kwargs.get("slack_shortfall"))
     lines.append("")
     lines.append("Physical recovery from the real material flow projection:")
     add("  Average annual recovery (USD)", kwargs.get("avg_annual_usd"))
     add("  Peak retirement year", kwargs.get("peak_year"))
     add("  Recovery in that peak year (USD)", kwargs.get("peak_usd"))
     add("  Coverage of no-substitution shortfall", kwargs.get("coverage_no_slack"))
-    add("  Coverage of 20%-slack shortfall", kwargs.get("coverage_20pct"))
+    add(f"  Coverage of {slack_label}-slack shortfall", kwargs.get("coverage_20pct"))
     add("  Price used (USD/tonne)", kwargs.get("price"))
     add("  Price source", kwargs.get("price_source"))
     if kwargs.get("price_range"):
@@ -68,7 +73,7 @@ def build_context(**kwargs: object) -> str:
     lines.append("Minimum-cost supplier diversification (a linear program, see the dashboard's own caption):")
     add("  Target: max share for any one supplier", kwargs.get("target_share"))
     add("  Real reallocation needed, no substitution", kwargs.get("div_no_slack_note"))
-    add("  Real reallocation needed, 20% slack", kwargs.get("div_slack_note"))
+    add(f"  Real reallocation needed, {slack_label} slack", kwargs.get("div_slack_note"))
     if kwargs.get("cross_material_table"):
         lines.append("")
         lines.append("How this material compares to the other six (each against its own real top supplier):")
