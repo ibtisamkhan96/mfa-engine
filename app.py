@@ -24,9 +24,9 @@ so plainly and stops, rather than substituting placeholder data.
 The risk connector covers every material a physical system actually
 contains that also has a matching, trackable UN Comtrade commodity code:
 copper and rare earth metals from wind turbines; copper, lithium, nickel,
-cobalt and graphite from EV batteries; copper from data centres. That is every
-one of Wu Chen's own named Villum grant materials (cobalt, copper, nickel,
-lithium), and copper specifically is tracked from all three systems, so the
+cobalt and graphite from EV batteries; copper from data centres. Cobalt,
+copper, nickel and lithium are all among them, and copper specifically is
+tracked from all three systems, so the
 same real recovered tonne can be compared across technologies, the actual
 point of connecting more than one system to this risk data in the first place.
 
@@ -38,6 +38,7 @@ visual system (validated colours, chart styling, shared page components) lives i
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -145,6 +146,7 @@ from ui.theme import (  # noqa: E402
 )
 from ui.supply_map import build_payload as build_map_payload, load_supply, supply_map  # noqa: E402
 from ui.guides import PAGE_GUIDES, READING_ANY_PAGE  # noqa: E402
+from ui.glossary import GROUPS as GLOSSARY_GROUPS, TERMS as GLOSSARY_TERMS  # noqa: E402
 
 # Each physical system: its real loader, the real "as of" date its own data
 # actually reflects, and the vocabulary its own category/unit actually mean,
@@ -304,16 +306,15 @@ MATERIAL_GROUPS = {
     },
     "Lithium": {
         "system": "ev",
-        "hs_code": "2836",
-        "name": "carbonates (incl. lithium carbonate)",
+        # HS 2836.91, lithium carbonates: the six-digit code, not the four-digit HS 2836 this used
+        # first. HS 2836 is every carbonate and traded 23.5 million tonnes in 2023, 25-30 times world
+        # lithium carbonate production, almost all of it soda ash by weight; the six-digit code is
+        # lithium carbonate alone.
+        "hs_code": "283691",
+        "name": "lithium carbonate",
         "physical_columns": ["lithium"],
-        # NOT "implied": checked and rejected. HS 2836 "Carbonates" traded
-        # 23.5 million real tonnes in 2023, roughly 25-30x real global
-        # lithium carbonate production (~0.8-0.9 Mt/year), so the code is
-        # overwhelmingly non-lithium carbonates (almost certainly soda ash),
-        # and its implied unit value ($860/t) is nowhere near real lithium
-        # carbonate economics. A real, dated external quote is honest here;
-        # a blended implied price from this code is not.
+        # External price, not the implied trade unit value: a dated, product-matched market quote for
+        # battery-grade lithium carbonate is the cleaner reference for valuing recovered material.
         "price_mode": "external",
         "external_price": 32_694.0,
         "external_price_range": (22_950.0, 32_694.0, 42_000.0),
@@ -325,6 +326,15 @@ MATERIAL_GROUPS = {
         "collapse from its late-2022 peak. The annual average and the spot low/high come from "
         "different aggregation methods (full-year average vs. specific in-year spot points), "
         "disclosed here rather than presented as if directly comparable.",
+        # Units: the EV model counts lithium as metal content (cathode stoichiometry), but lithium is
+        # priced as lithium carbonate. Li2CO3 is 73.89 g/mol and carries two lithium atoms (2 x 6.94),
+        # so one tonne of lithium is 73.89 / 13.88 = 5.32 tonnes of lithium carbonate equivalent (LCE).
+        # Valuing lithium-metal tonnes at the carbonate price understated every lithium dollar figure,
+        # and lithium's coverage, 5.32-fold until this was found.
+        "value_factor": 73.89 / (2 * 6.94),
+        "value_factor_note": "Recovered lithium is counted as lithium metal content and valued as "
+        "lithium carbonate: 1 t of lithium = 5.32 t of lithium carbonate equivalent (Li2CO3 73.89 g/mol, "
+        "two Li at 6.94), so each tonne is valued at 5.32 times the carbonate price.",
         "real_slack": _DEFAULT_SLACK,
         "real_slack_note": "No real capacity-utilization figure exists for lithium: no ICSG-equivalent "
         "industry body publishes one, and USGS Mineral Commodity Summaries 2024 reports only "
@@ -569,7 +579,7 @@ def compute_cascade(edges: pd.DataFrame, country: str, slack: float) -> dict:
 def compute_fragility(edges: pd.DataFrame, country: str, beta: float = 0.2) -> dict:
     """A second, dynamic view of the same disruption, using crm-trade-network's
     shock_propagation module (added there to replicate, at single-trade-layer
-    resolution, the linear-threshold cascade Wu Chen's group runs for cobalt:
+    resolution, the linear-threshold cascade Ouyang et al. run for cobalt:
     Ouyang, Liu, Liu, Chen, Wang, Pang, He, Liu, Environ. Sci. Ecotechnol. 29,
     2026, 100654). compute_cascade above asks a static question, how much trade
     value does this country directly supply; this asks a dynamic one, once that
@@ -580,6 +590,25 @@ def compute_fragility(edges: pd.DataFrame, country: str, beta: float = 0.2) -> d
 
     G = build_graph(edges)
     return simulate_cascade(G, country, beta=beta)
+
+
+@st.cache_data(show_spinner="Re-running the cascade across failure thresholds...")
+def compute_threshold_curve(edges: pd.DataFrame, country: str) -> pd.DataFrame:
+    """The same cascade re-run across failure thresholds for one removed supplier. The central
+    result of the cascade literature (Ouyang et al. 2024 for lithium, 2026 for cobalt) is that a
+    network does not degrade gradually as countries become less tolerant: it switches abruptly at
+    a critical threshold. One threshold, the 20% every other figure on the page uses, cannot show
+    where that switch sits; this sweep does."""
+    from network import build_graph
+    from shock_propagation import simulate_cascade
+
+    G = build_graph(edges)
+    rows = []
+    for beta in np.round(np.arange(0.05, 0.951, 0.025), 3):
+        res = simulate_cascade(G, country, beta=float(beta))
+        rows.append({"threshold": float(beta), "share_failing": res["avalanche_fraction"],
+                     "countries_failing": res["avalanche_size"], "rounds": res["rounds"]})
+    return pd.DataFrame(rows)
 
 
 @st.cache_data(show_spinner=False)
@@ -689,7 +718,7 @@ def compute_all_material_scenarios(horizon_year: int, recovery_regime: str) -> p
             cascade_country_removed=top1, cascade_shortfall_usd_no_slack=no_slack["shortfall_usd"],
             cascade_shortfall_usd_20pct_slack=slack20["shortfall_usd"],
         )
-        res = recovery_vs_disruption(annualized, price, price_source, risk)
+        res = recovery_vs_disruption(annualized, price * g.get("value_factor", 1.0), price_source, risk)
         rows.append({
             "material": name, "top1": top1, "top1_share": share,
             "coverage_no_slack": res["recovered_share_of_no_slack_shortfall"],
@@ -890,7 +919,13 @@ with st.sidebar.expander("Price assumption", icon=":material/payments:"):
         # real external citation was still found and is shown here, disclosed as context rather than
         # silently dropped or forced into a range that wouldn't bracket the central estimate above.
         st.caption(group["external_context"])
+    if "value_factor_note" in group:
+        st.caption(group["value_factor_note"])
 price_source = default_price_source if price == default_price else "user-entered override"
+# USD per tonne of the material as this engine counts it: the market price times the unit
+# conversion where the two differ (lithium metal content vs lithium carbonate), 1 otherwise.
+VALUE_FACTOR = group.get("value_factor", 1.0)
+value_per_t = price * VALUE_FACTOR
 
 fresh = cache_freshness(2023, group["hs_code"])
 st.sidebar.divider()
@@ -1012,16 +1047,16 @@ elif slack_shortfall <= 0:
     price_high_result = None
     scenario_note = ("slack_covers_it", no_slack_shortfall)
 else:
-    connector_result = recovery_vs_disruption(annualized_series, price, price_source, risk)
-    peak_connector_result = recovery_vs_disruption(peak_annualized_series, price, price_source, risk)
+    connector_result = recovery_vs_disruption(annualized_series, value_per_t, price_source, risk)
+    peak_connector_result = recovery_vs_disruption(peak_annualized_series, value_per_t, price_source, risk)
     # Coverage at the real price range's own low and high bound, not the (possibly user-
     # overridden) price above: this shows how much of the coverage-percentage conclusion is
     # actually sensitive to real, cited price uncertainty, the same (low, central, high)
     # treatment material content already gets, using the selected material's own price_range
     # and price_range_source computed in the sidebar section above.
     if price_range:
-        price_low_result = recovery_vs_disruption(annualized_series, price_range[0], price_source, risk)
-        price_high_result = recovery_vs_disruption(annualized_series, price_range[2], price_source, risk)
+        price_low_result = recovery_vs_disruption(annualized_series, price_range[0] * VALUE_FACTOR, price_source, risk)
+        price_high_result = recovery_vs_disruption(annualized_series, price_range[2] * VALUE_FACTOR, price_source, risk)
     else:
         price_low_result = price_high_result = None
     # Coverage at the recycling rate's own low and high bound: most rates are published as
@@ -1030,7 +1065,7 @@ else:
     for bound in ("low", "high"):
         rec_bound = _projection_window(apply_recovery(gross_outflow, recovery_regime, bound)
                                        .set_index("year")[group["physical_columns"]].sum(axis=1))
-        res_bound = recovery_vs_disruption(pd.Series([float(rec_bound.mean())]), price, price_source, risk)
+        res_bound = recovery_vs_disruption(pd.Series([float(rec_bound.mean())]), value_per_t, price_source, risk)
         if bound == "low":
             recovery_low_result = res_bound
         else:
@@ -1069,7 +1104,7 @@ SECTION = {
     "overview": "Overview", "lifetimes": "Physical flows", "stocks": "Physical flows",
     "eol": "Physical flows", "scenarios": "Physical flows", "supplymap": "Supply risk", "disruption": "Supply risk",
     "cascade": "Supply risk", "diversification": "Supply risk", "copper": "Compare",
-    "materials": "Compare", "ask": "Tools", "methods": "Reference",
+    "materials": "Compare", "ask": "Tools", "methods": "Reference", "glossary": "Reference",
 }
 
 
@@ -1086,6 +1121,7 @@ def show_guide(key: str) -> None:
     st.markdown(READING_ANY_PAGE)
     st.caption("Full sources, assumptions and what this dashboard deliberately does not claim are on the "
                "Methods & data page.")
+    st.page_link(PAGES["glossary"], label="Every term and formula, explained: the Glossary", icon=":material/abc:")
 
 
 def header(key: str, title: str, lede: str) -> None:
@@ -1262,7 +1298,8 @@ def page_overview():
 
     st.subheader("Go further")
     with st.container(horizontal=True, gap="small"):
-        for key in ("supplymap", "scenarios", "cascade", "diversification", "copper", "materials", "ask", "methods"):
+        for key in ("supplymap", "scenarios", "cascade", "diversification", "copper", "materials", "glossary",
+                    "ask", "methods"):
             st.page_link(PAGES[key], label=PAGES[key].title, icon=PAGES[key].icon)
 
     footer("overview")
@@ -1894,10 +1931,6 @@ def page_supply_map():
             + ("\n- **Re-export hubs** (the Netherlands, Belgium, Singapore, Hong Kong, the UAE): part of "
                "their trade is transit rather than origin, and the tooltip says so.")
         )
-        if group["hs_code"] == "2836":
-            st.caption("For lithium, HS 2836 covers all carbonates, and most of that trade by weight is not "
-                       "lithium carbonate (see the Disruption page's price note). Read the arcs as where "
-                       "carbonate trade goes, not as lithium tonnes.")
         if not notes["has_history"]:
             st.caption("The installed crm-trade-network does not report cascade rounds yet, so the replay "
                        "button is off; the Cascade page still shows the final result.")
@@ -2040,8 +2073,8 @@ def page_disruption():
                 )
             st.caption(
                 f"Cumulative {material_choice.lower()} recovered, {projection_start_year}-{horizon_year}: "
-                f"{cumulative_recovered_tonnes:,.0f} t, \\${cumulative_recovered_tonnes * price / 1e6:,.1f} M "
-                f"at \\${price:,.0f}/t. The comparison deliberately does **not** use that number, see why next."
+                f"{cumulative_recovered_tonnes:,.0f} t, \\${cumulative_recovered_tonnes * value_per_t / 1e6:,.1f} M "
+                f"at \\${value_per_t:,.0f}/t. The comparison deliberately does **not** use that number, see why next."
             )
             st.caption(
                 "Both the shortfall figures and \"average annual recovery\" describe one year, on purpose: "
@@ -2051,7 +2084,8 @@ def page_disruption():
                 "not because recycling is winning, but because decades of accumulated recovery were being "
                 "measured against a single year's cost. This engine compares one real year against another. "
                 f"t-bar is the mean of the real year-by-year recovered-tonnes series shown in the next "
-                f"chart; p is the price set in the sidebar (\\${price:,.0f}/t)."
+                f"chart; p is the price set in the sidebar (\\${price:,.0f}/t)"
+                + (f", times {VALUE_FACTOR:.2f}: {group['value_factor_note']}" if VALUE_FACTOR != 1.0 else ".")
             )
             if price_low_result and price_high_result:
                 st.caption(
@@ -2073,7 +2107,7 @@ def page_disruption():
             )
 
         st.subheader("Recovery by year, not just the average")
-        year_values_usd = material_by_year * price
+        year_values_usd = material_by_year * value_per_t
         peak_share = (peak_connector_result["recovered_share_of_no_slack_shortfall"]
                       if peak_connector_result else None)
         if peak_year is not None and peak_share is not None:
@@ -2170,19 +2204,69 @@ def page_cascade():
     fc3.metric("Rounds for the cascade to finish", f"{fragility['rounds']}", border=True)
     with how_calculated():
         st.markdown(
-            "This is the same cascading-failure method Wu Chen's own group runs for cobalt (Ouyang, Liu, "
-            "Liu, Chen, Wang, Pang, He, Liu, *Environ. Sci. Ecotechnol.* 29, 2026, 100654), applied here "
-            "at the one real trade layer this project has rather than their six real cobalt life-cycle "
-            "stages, see crm-trade-network's own README for the full, honest scope of that difference."
+            "This is the linear-threshold cascading-failure method of Ouyang et al. for cobalt (Ouyang, "
+            "Liu, Liu, Chen, Wang, Pang, He, Liu, *Environ. Sci. Ecotechnol.* 29, 2026, 100654), applied "
+            "here at the one real trade layer this project has rather than their six cobalt life-cycle "
+            "stages; crm-trade-network's README sets out the full scope of that difference."
         )
         st.caption(
-            "Real, run-yourself result, not borrowed from the published paper: at this same 20% "
-            "failure threshold, this model showed a sharp, abrupt jump between near-total collapse "
-            "and near-total immunity across every commodity tested (rare earth compounds, cobalt, "
-            "both lithium codes), the same \"robust-yet-fragile\" pattern reported in Wu Chen's "
-            "cobalt paper and, separately, her 2024 lithium network paper. Source: crm-trade-network, "
-            "src/shock_propagation.py, real 2023 UN Comtrade data."
+            "Run on this project's own data, not borrowed from the published papers: as the failure "
+            "threshold rises, the share of the network that fails switches abruptly from near-total "
+            "collapse to near-immunity across every commodity tested (rare earth compounds, cobalt, "
+            "both lithium codes; the chart below shows it for the selected supplier), the same "
+            "\"robust-yet-fragile\" pattern reported for cobalt (Ouyang et al. 2026) and, separately, "
+            "for the global lithium network (Ouyang et al., *Environ. Sci. Technol.* 58, 2024, 22135). "
+            "Source: crm-trade-network, src/shock_propagation.py, real 2023 UN Comtrade data."
         )
+
+    st.subheader("How much does the failure threshold matter?")
+    curve = compute_threshold_curve(commodity_edges, removed_country)
+    full = curve[curve.share_failing >= 0.95].threshold.max()
+    calm = curve[curve.share_failing <= 0.05].threshold.min()
+    at_20 = float(curve.loc[(curve.threshold - 0.20).abs().idxmin(), "share_failing"])
+    if pd.notna(full) and pd.notna(calm):
+        takeaway(f"If countries fail after losing <b>{full:.0%}</b> of their trade or less, losing "
+                 f"{esc(removed_country)} takes down at least 95% of the network; from <b>{calm:.0%}</b> "
+                 f"upward, under 5% fails. The switch happens over a narrow band, not gradually. The 20% "
+                 f"used above sits {'inside the collapse zone' if full >= 0.20 else 'past the collapse zone'}.")
+    elif pd.notna(full):
+        takeaway(f"Losing {esc(removed_country)} takes down at least 95% of the network at every threshold up "
+                 f"to <b>{full:.0%}</b>, and the network never becomes immune within the range tested "
+                 f"(at 20%: {at_20:.0%} fails).")
+    else:
+        takeaway(f"At the 20% threshold used above, <b>{at_20:.0%}</b> of the network fails; the sweep "
+                 "shows how that share changes as countries become more or less tolerant.")
+    fig_t = go.Figure()
+    if pd.notna(full) and pd.notna(calm) and calm > full:
+        fig_t.add_vrect(x0=full, x1=calm, fillcolor=NEUTRAL, opacity=0.12, line_width=0)
+        # Labelled just right of the band at half height: past the band the curve is always under 5%,
+        # so the label cannot sit on it, however narrow the band is.
+        fig_t.add_annotation(x=calm, y=0.5, text="transition band", showarrow=False, xanchor="left",
+                             xshift=6, font=dict(size=11))
+    fig_t.add_trace(go.Scatter(
+        x=curve.threshold, y=curve.share_failing, mode="lines+markers", name="Share of the network that fails",
+        line=dict(color=ACCENT, width=2.5, shape="spline", smoothing=0.3), marker=dict(size=6, color=ACCENT),
+        customdata=curve.countries_failing, hovertemplate="%{y:.1%} of the network (%{customdata} countries)",
+    ))
+    fig_t.add_vline(x=0.20, line=dict(color=NEUTRAL, width=1, dash="dot"),
+                    annotation_text="20%, used above", annotation_position="bottom left")
+    style_fig(fig_t, height=360, legend=False)
+    fig_t.update_xaxes(title_text="Failure threshold: share of its trade a country can lose before it fails",
+                       tickformat=".0%", range=[0.03, 0.97])
+    fig_t.update_yaxes(title_text="Share of the network that fails", tickformat=".0%", range=[-0.03, 1.05])
+    show_chart(fig_t, "chart_threshold_curve")
+    with how_calculated():
+        st.caption(
+            f"The cascade above re-run {len(curve)} times, removing {removed_country} each time, with the "
+            "failure threshold stepped from 5% to 95%. The threshold is the share of its own trade in this "
+            "commodity a country can lose, through partners that failed before it, and still carry on; a "
+            "low threshold means fragile countries. The published cobalt and lithium studies search for "
+            "the critical threshold where the network switches from collapse to resilience; this sweep "
+            "finds it on the single trade layer this project has. The shaded band runs from the last "
+            "threshold with at least 95% of the network failing to the first with under 5%."
+        )
+    download_csv(curve, f"threshold_sweep_hs{group['hs_code']}_{removed_country.replace(' ', '_')}.csv",
+                 "dl_threshold_curve")
 
     st.subheader(f"Who trades {group['name']} with whom")
     N_TRADE_NODES = 8
@@ -2450,6 +2534,75 @@ def page_materials():
     footer("materials")
 
 
+def _slug(term: str) -> str:
+    return "g-" + re.sub(r"[^a-z0-9]+", "-", term.lower()).strip("-")
+
+
+def _symbols_html(text: str) -> str:
+    """Escape, then turn plain-text subscripts into real ones: d_i, S*_t, M_{m,t}."""
+    out = esc(text)
+    out = re.sub(r"([A-Za-z*])_\{([^}]+)\}", r"\1<sub>\2</sub>", out)
+    return re.sub(r"([A-Za-z*])_([A-Za-z0-9]+)", r"\1<sub>\2</sub>", out)
+
+
+def page_glossary():
+    header(
+        "glossary", "Terms and formulas",
+        "Every technical term and formula the dashboard uses: a plain explanation first, then the exact "
+        "formula the code computes, what its symbols mean, and the pages where you will meet it. Search, "
+        "filter by topic, or jump from the index.",
+    )
+    c1, c2 = st.columns([2, 3], vertical_alignment="bottom")
+    with c1:
+        query = st.text_input("Search the glossary", key="glossary_q", icon=":material/search:",
+                              placeholder="e.g. Weibull, HHI, slack, cascade")
+    with c2:
+        picked = st.pills("Topics", GLOSSARY_GROUPS, selection_mode="multi", key="glossary_groups")
+    q = query.strip().lower()
+
+    def matches(t: dict) -> bool:
+        text = " ".join([t["term"], t.get("aka", ""), t["plain"], t.get("symbols", "")]).lower()
+        return (not picked or t["group"] in picked) and (not q or q in text)
+
+    shown = [t for t in GLOSSARY_TERMS if matches(t)]
+    if not shown:
+        st.info("No term matches that search. Try a shorter word, or clear the topic filter.",
+                icon=":material/search_off:")
+        footer("glossary")
+        return
+
+    st.html(
+        f'<div class="gl-count">{len(shown)} of {len(GLOSSARY_TERMS)} terms</div><nav class="gl-index" '
+        'aria-label="Glossary index">'
+        + "".join(f'<a href="#{_slug(t["term"])}">{esc(t["term"])}</a>'
+                  for t in sorted(shown, key=lambda t: t["term"].lower()))
+        + "</nav>"
+    )
+    for group_name in GLOSSARY_GROUPS:
+        in_group = [t for t in shown if t["group"] == group_name]
+        if not in_group:
+            continue
+        st.subheader(group_name)
+        cols = st.columns(2)
+        for i, t in enumerate(in_group):
+            with cols[i % 2]:
+                with st.container(border=True):
+                    aka = f'<span class="gl-aka">{esc(t["aka"])}</span>' if t.get("aka") else ""
+                    st.html(f'<div class="gl-card" id="{_slug(t["term"])}"><div class="gl-term">'
+                            f'{esc(t["term"])}{aka}</div><p class="gl-plain">{esc(t["plain"])}</p></div>')
+                    if t.get("formula"):
+                        st.latex(t["formula"])
+                    if t.get("symbols"):
+                        # st.html, not st.caption: symbol lists like "S*_t ... S*_0" would be read as
+                        # markdown emphasis and mangled.
+                        st.html(f'<p class="gl-sym">{_symbols_html(t["symbols"])}</p>')
+                    with st.container(horizontal=True, gap="small", vertical_alignment="center"):
+                        st.html('<span class="gl-see">Appears on</span>', width="content")
+                        for k in t["pages"]:
+                            st.page_link(PAGES[k], label=PAGES[k].title, icon=PAGES[k].icon)
+    footer("glossary")
+
+
 def page_ask():
     header(
         "ask", "Ask the data",
@@ -2496,7 +2649,9 @@ def page_ask():
                 coverage_no_slack=f"{connector_result['recovered_share_of_no_slack_shortfall']:.2%}" if connector_result else None,
                 coverage_20pct=f"{connector_result['recovered_share_of_20pct_slack_shortfall']:.2%}" if connector_result else None,
                 real_slack_pct=f"{group['real_slack']:.1%}",
-                price=f"${price:,.0f}/t", price_source=price_source,
+                price=(f"${price:,.0f}/t" + (f" (valued at ${value_per_t:,.0f} per tonne of material: "
+                       f"{group['value_factor_note']})" if VALUE_FACTOR != 1.0 else "")),
+                price_source=price_source,
                 price_range=(f"${price_low_result['recovered_share_of_no_slack_shortfall']:.2%}-"
                              f"{price_high_result['recovered_share_of_no_slack_shortfall']:.2%} coverage across the "
                              f"real cited price range") if (price_low_result and price_high_result) else None,
@@ -2556,9 +2711,9 @@ def page_methods():
         "concentration.\n"
         "- Every material connected here is one a real physical system actually contains, with a "
         "matching, trackable UN Comtrade code: copper and rare earths from wind turbines; copper, "
-        "lithium, nickel, cobalt and graphite from EV batteries; copper from data centres. That is every "
-        "one of Wu Chen's own named Villum grant materials (cobalt, copper, nickel, lithium), and copper "
-        "specifically is tracked from all three systems so the same real recovered tonne can be compared "
+        "lithium, nickel, cobalt and graphite from EV batteries; copper from data centres. Cobalt, "
+        "copper, nickel and lithium are all among them, and copper specifically is tracked from all three "
+        "systems so the same real recovered tonne can be compared "
         "across technologies, not just within one.\n"
         "- No confidence interval is plotted on the survival curve, because this engine does not "
         "compute one. Showing a fabricated band would be worse than showing none.\n"
@@ -2642,6 +2797,7 @@ PAGES = {
     "copper": st.Page(page_copper, title="Copper across technologies", icon=":material/stacked_line_chart:",
                       url_path="copper"),
     "materials": st.Page(page_materials, title="All materials", icon=":material/leaderboard:", url_path="all-materials"),
+    "glossary": st.Page(page_glossary, title="Glossary", icon=":material/abc:", url_path="glossary"),
     "ask": st.Page(page_ask, title="Ask the data", icon=":material/forum:", url_path="ask"),
     "methods": st.Page(page_methods, title="Methods & data", icon=":material/menu_book:", url_path="methods"),
 }
@@ -2650,7 +2806,7 @@ NAV_SECTIONS = {
     "Physical flows": ["lifetimes", "stocks", "eol", "scenarios"],
     "Supply risk": ["supplymap", "disruption", "cascade", "diversification"],
     "Compare": ["copper", "materials"],
-    "Reference": ["ask", "methods"],
+    "Reference": ["glossary", "ask", "methods"],
 }
 navigation = st.navigation(
     {section: [PAGES[k] for k in keys] for section, keys in NAV_SECTIONS.items()}, position="hidden",

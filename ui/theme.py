@@ -218,6 +218,23 @@ header[data-testid="stHeader"] {
 /* ---------- the "How to read this page" button stays on one line at any width */
 [class*="st-key-guide_"] button, [class*="st-key-guide_"] button p { white-space: nowrap; }
 
+/* ---------- glossary */
+.gl-count { font: 600 .72rem/1.2 var(--mono); letter-spacing: .08em; text-transform: uppercase; opacity: .65; margin: .2rem 0 .5rem; }
+.gl-index { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 .6rem; }
+.gl-index a {
+  font-size: .82rem; line-height: 1.2; padding: .28rem .6rem; border-radius: 999px; text-decoration: none;
+  color: inherit; border: 1px solid var(--hairline);
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.gl-index a:hover, .gl-index a:focus-visible { border-color: var(--mat); background: rgba(var(--mat-rgb), .1); }
+.gl-card { scroll-margin-top: 5rem; }
+.gl-card:target .gl-term { color: var(--mat); }
+.gl-term { font-weight: 600; font-size: 1.05rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; transition: color .4s ease; }
+.gl-aka { font: 500 .78rem/1.2 var(--mono); opacity: .65; }
+.gl-plain { margin: .35rem 0 0; line-height: 1.6; }
+.gl-sym { margin: 0; font-size: .86rem; line-height: 1.55; opacity: .75; }
+.gl-see { font: 600 .68rem/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; opacity: .6; }
+
 /* ---------- charts sit on the page, not in a box */
 [data-testid="stPlotlyChart"] { border-radius: 10px; }
 

@@ -31,6 +31,7 @@ PAGES = {
     "diversification": "What it would take to diversify",
     "copper": "One material, three technologies: copper",
     "all-materials": "Which recovery pathway matters most",
+    "glossary": "Terms and formulas",
     "ask": "Ask the data",
     "methods": "Methods and data",
 }
@@ -51,7 +52,7 @@ GUIDE_KEYS = {
     "overview": "overview", "lifetimes": "lifetimes", "stocks-and-flows": "stocks", "end-of-life": "eol",
     "scenarios": "scenarios", "supply-map": "supplymap", "disruption": "disruption", "cascade": "cascade",
     "diversification": "diversification", "copper": "copper", "all-materials": "materials", "ask": "ask",
-    "methods": "methods",
+    "methods": "methods", "glossary": "glossary",
 }
 
 

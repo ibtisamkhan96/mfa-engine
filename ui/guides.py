@@ -19,6 +19,8 @@ READING_ANY_PAGE = """
   the same view.
 - **Reading order**: the back and next links at the bottom of each page walk through the analysis
   from start to finish.
+- **New to a term?** The Glossary page, under Reference, explains every term and formula in plain
+  words and shows where each one appears.
 """
 
 PAGE_GUIDES = {
@@ -108,12 +110,15 @@ PAGE_GUIDES = {
         "shows": "How many other countries fail once the removed supplier stops trading, and who trades "
                  "with whom.",
         "read": "The cards give the number of countries that fail, their share of the network and how many "
-                "rounds it takes. In the Sankey diagram, exporters are on the left and importers on the "
-                "right; the removed supplier and its trade are red.",
+                "rounds it takes, at a 20% failure threshold. The threshold chart then re-runs the cascade "
+                "from 5% to 95%: the shaded band is where the network switches from collapse to "
+                "near-immunity. In the Sankey diagram, exporters are on the left and importers on the right; "
+                "the removed supplier and its trade are red.",
         "method": "A linear-threshold cascade: a country fails once it has lost over 20% of its trade in this "
-                  "commodity, because partners failed first. This follows Wu Chen's group's cobalt method, "
+                  "commodity, because partners failed first. This follows Ouyang et al.'s cobalt method (2026), "
                   "applied to one trade layer instead of six life-cycle stages.",
-        "try": "Open the Supply map page and press play to watch these rounds on a map.",
+        "try": "Change the supplier removed in the sidebar and see whether the transition band moves; then "
+               "open the Supply map page and press play to watch the rounds on a map.",
     },
     "diversification": {
         "shows": "How much trade would have to move to bring every supplier under a maximum share.",
@@ -145,6 +150,15 @@ PAGE_GUIDES = {
                   "not plotted.",
         "try": "With an EV material picked in the sidebar, switch the recovery assumption to the EU battery "
                "targets and watch the EV materials move.",
+    },
+    "glossary": {
+        "shows": "Every technical term and formula the dashboard uses, grouped by topic.",
+        "read": "Each card gives a plain explanation first, then the exact formula the code computes (where "
+                "there is one), what its symbols mean, and links to the pages where the term appears. The "
+                "index at the top jumps straight to any term.",
+        "method": "The formulas are written from the dashboard's own code, not from textbooks, so they "
+                  "describe what this dashboard actually calculates, including its simplifications.",
+        "try": "Search for \"slack\" or \"threshold\", then follow a link to the page where it is used.",
     },
     "ask": {
         "shows": "A question box answered by Claude using only the numbers already computed on these pages.",

@@ -128,12 +128,15 @@ not just a single system's own numbers in isolation.
 **That connector now also runs crm-trade-network's cascading-failure model, not just
 its static concentration numbers.** The dashboard's Cascade & trade network page runs
 [crm-trade-network](../crm-trade-network)'s `shock_propagation` module (built there to
-replicate, at single-trade-layer resolution, the linear-threshold cascade Wu Chen's
-group runs for cobalt: Ouyang, Liu, Liu, Chen, Wang, Pang, He, Liu, *Environ. Sci.
+replicate, at single-trade-layer resolution, the linear-threshold cascade Ouyang et
+al. run for cobalt: Ouyang, Liu, Liu, Chen, Wang, Pang, He, Liu, *Environ. Sci.
 Ecotechnol.* 29, 2026, 100654) against the same 2023 trade network already loaded for
 the static HHI/shortfall figures, surfacing how many *other* countries a disruption
 itself takes down as their own trade partners collapse in turn, not only how much trade
-value the removed country directly supplied.
+value the removed country directly supplied. The Cascade page also re-runs the cascade across failure
+thresholds from 5% to 95%, because the published result is where the network switches from
+collapse to resilience, which one fixed threshold cannot show: losing Chile brings down the
+whole refined-copper network up to a 25% threshold, and under 5% of it from 55% upward.
 
 **A full stock-flow account, not only an outflow projection**
 (`CohortSurvivalMFA.project_stock_flows`): inflow, in-use stock and end-of-life outflow
@@ -171,18 +174,24 @@ but only about 22% more into end-of-life outflow over 2025-2050, since outflow l
 by roughly one battery lifetime (median about 13 years). A deployment choice made now
 barely shows up in recycling until the late 2030s.
 
-**Three silent errors found and fixed while building this**, each now covered by a
+**Four silent errors found and fixed while building this**, each now covered by a
 test: (1) the dashboard pinned the EV snapshot to 2024-12-31, so the real 2025 and 2026
 sales, about 43 million vehicles, were dropped by the engine's own "already in service"
 filter and never reached the dashboard at all; (2) the STEPS trajectory kept extending its
 2026-2035 slope past 2035, silently reaching an 87% EV share by 2050, a figure no source
 gives; (3) the EV sales table was treated as if every vehicle ever sold were still on the
-road, overstating the stock and pushing retirements that already happened into the future.
+road, overstating the stock and pushing retirements that already happened into the future. (4) recovered lithium, counted as lithium metal content, was valued at the lithium
+carbonate price, understating every lithium dollar figure 5.32-fold (one tonne of lithium is
+73.89 / 13.88 = 5.32 tonnes of lithium carbonate); lithium is now valued per tonne of lithium
+at 5.32 times the carbonate price, with the conversion stated where the price is set
+(`tests/test_lithium_valuation.py`).
 
-**One dashboard** (`app.py`, Streamlit), thirteen pages in reading order. Overview first,
+**One dashboard** (`app.py`, Streamlit), fourteen pages. Overview first,
 then *Physical flows* (Lifetimes, Stocks & flows, End-of-life materials, Scenarios), *Supply
 risk* (Supply map, Disruption & recovery, Cascade & trade network, Diversification), *Compare* (Copper
-across technologies, All materials) and *Reference* (Ask the data, Methods & data). The
+across technologies, All materials) and *Reference* (Glossary, Ask the data, Methods & data).
+The Glossary explains all 45 technical terms in plain words, with the exact formula the code
+computes for each and links to where it appears (`ui/glossary.py`). The
 sidebar holds what every page shares, in the order you need it: the material (and, for copper,
 which of the three systems it sits in), then the page list, then the horizon, recovery
 assumption, disrupted supplier and price. Material, system and horizon are kept in the URL, so
@@ -305,6 +314,7 @@ python tests/test_scenarios.py                # the two deployment scenarios gen
 python tests/test_stock_flows.py              # mass balance closes every year; recovered never exceeds outflow
 python tests/test_data_centre.py              # stock-driven engine: tracks the requirement, steady-state spin-up, no negative building
 python tests/test_dashboard_pages.py          # every page for every material renders cleanly; every page's reading guide opens
+python tests/test_lithium_valuation.py        # recovered lithium is valued as lithium carbonate equivalent (x5.32)
 ```
 
 ## What this honestly is not

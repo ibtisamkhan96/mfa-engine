@@ -1,12 +1,12 @@
-"""The genuinely new piece: connecting a physical dMFA projection to real
-trade-concentration risk for the same material.
+"""Connecting a physical dMFA projection to trade-concentration risk for the
+same material.
 
-No existing tool does this. ODYM and flodym project physical material flow
-for one system, with no supply-risk layer at all. crm-trade-network
-quantifies real supply concentration and cascade-shortfall risk from real
-UN Comtrade data, with no forward-looking physical flow projection. GCMat
-has economic sophistication but only for rare earths, and is not built to
-plug in an arbitrary technology system's own material output.
+The two halves usually live apart. ODYM and flodym project physical material
+flows for a system but carry no supply-risk layer; crm-trade-network
+quantifies supply concentration and cascade-shortfall risk from UN Comtrade
+data but has no forward-looking physical flow projection. Integrated models
+exist, GCMat's economic model for rare earths among them, but tend to be built
+around one material rather than to take any technology system's own output.
 
 This module is the connector: take a CohortSurvivalMFA subclass's own real
 projected material flow for one material, and a crm-trade-network-style
