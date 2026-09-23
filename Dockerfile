@@ -2,8 +2,14 @@
 # out dk-wind-mfa and crm-trade-network as sibling folders next to this repo (see
 # app.py's own DK_WIND_MFA_SRC/CRM_TRADE_NETWORK_SRC comment); a container has no such
 # thing, so this clones both real, public sibling repos at build time instead of
-# vendoring a copy, so a real upstream fix is picked up on the next image rebuild
-# rather than silently drifting from an inlined snapshot.
+# vendoring a copy.
+#
+# Each clone is pinned to an exact commit. Two reasons. Reproducibility: the image is built
+# from the same sibling versions the tests passed against, not whatever is newest. And caching:
+# an unpinned clone line never changes, so a builder with layer caching (Railway) reuses an old
+# clone and silently misses upstream data; this happened once, when lithium moved to a new HS
+# code and the deployed app kept an old crm-trade-network without it. Bumping a commit below
+# changes this layer and forces a fresh clone.
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -11,8 +17,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git \
  && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth 1 https://github.com/ibtisamkhan96/dk-wind-mfa.git /deps/dk-wind-mfa \
- && git clone --depth 1 https://github.com/ibtisamkhan96/crm-trade-network.git /deps/crm-trade-network
+ARG DK_WIND_MFA_COMMIT=2ae16dee66b3fca2e13edb5cc96ee71b29ccd500
+ARG CRM_TRADE_NETWORK_COMMIT=a84ee78de13306bc150a54aeaa038e3e8e887b44
+RUN git clone --quiet https://github.com/ibtisamkhan96/dk-wind-mfa.git /deps/dk-wind-mfa \
+ && git -C /deps/dk-wind-mfa checkout --quiet "$DK_WIND_MFA_COMMIT" \
+ && git clone --quiet https://github.com/ibtisamkhan96/crm-trade-network.git /deps/crm-trade-network \
+ && git -C /deps/crm-trade-network checkout --quiet "$CRM_TRADE_NETWORK_COMMIT"
 
 COPY requirements.txt .
 # pandas pinned below 3.0, not left to float: dk-wind-mfa's own load.py assigns pd.NA
