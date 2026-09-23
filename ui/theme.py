@@ -209,6 +209,15 @@ header[data-testid="stHeader"] {
 [data-testid="stExpander"] details:hover { border-color: rgba(var(--mat-rgb), .5); }
 [data-testid="stExpander"] summary { font-weight: 500; }
 
+/* ---------- the supply map's space is held only until its script has drawn it (the component
+   renders nothing before then), so the page below does not jump down half a screen when it
+   appears. The script then sets data-sm-ready and the element takes the map's natural height:
+   a fixed ratio kept after that let a wrapped legend spill over the next element. */
+.st-key-supply_map:not([data-sm-ready]) { aspect-ratio: 1000 / 540; }
+
+/* ---------- the "How to read this page" button stays on one line at any width */
+[class*="st-key-guide_"] button, [class*="st-key-guide_"] button p { white-space: nowrap; }
+
 /* ---------- charts sit on the page, not in a box */
 [data-testid="stPlotlyChart"] { border-radius: 10px; }
 

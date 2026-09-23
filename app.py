@@ -143,6 +143,8 @@ from ui.theme import (  # noqa: E402
     esc, rgba, usd, inject_css, style_fig, show_chart, end_labels, download_csv, page_header, takeaway,
     sidebar_label, material_tile,
 )
+from ui.supply_map import build_payload as build_map_payload, load_supply, supply_map  # noqa: E402
+from ui.guides import PAGE_GUIDES, READING_ANY_PAGE  # noqa: E402
 
 # Each physical system: its real loader, the real "as of" date its own data
 # actually reflects, and the vocabulary its own category/unit actually mean,
@@ -1061,20 +1063,44 @@ outflow_peak_year = int(outflow_by_year.idxmax()) if len(outflow_by_year) and ou
 
 # --------------------------------------------------------------------------- page scaffolding
 
-FLOW = ["overview", "lifetimes", "stocks", "eol", "scenarios", "disruption", "cascade",
+FLOW = ["overview", "lifetimes", "stocks", "eol", "scenarios", "supplymap", "disruption", "cascade",
         "diversification", "copper", "materials"]
 SECTION = {
     "overview": "Overview", "lifetimes": "Physical flows", "stocks": "Physical flows",
-    "eol": "Physical flows", "scenarios": "Physical flows", "disruption": "Supply risk",
+    "eol": "Physical flows", "scenarios": "Physical flows", "supplymap": "Supply risk", "disruption": "Supply risk",
     "cascade": "Supply risk", "diversification": "Supply risk", "copper": "Compare",
     "materials": "Compare", "ask": "Tools", "methods": "Reference",
 }
 
 
+@st.dialog("How to read this page", width="large")
+def show_guide(key: str) -> None:
+    guide = PAGE_GUIDES[key]
+    st.markdown(f"#### {PAGES[key].title}")
+    st.markdown(f"**What it shows.** {guide['shows']}")
+    st.markdown(f"**How to read it.** {guide['read']}")
+    st.markdown(f"**Method, in brief.** {guide['method']}")
+    st.markdown(f"**Try this.** {guide['try']}")
+    st.divider()
+    st.markdown("#### Reading any page")
+    st.markdown(READING_ANY_PAGE)
+    st.caption("Full sources, assumptions and what this dashboard deliberately does not claim are on the "
+               "Methods & data page.")
+
+
 def header(key: str, title: str, lede: str) -> None:
+    """Page title block, with the "How to read this page" button at its top right. On a phone
+    the two columns stack and the button follows the introduction."""
     where = (f"{SECTION[key]} \u00b7 step {FLOW.index(key)} of {len(FLOW) - 1}"
              if key in FLOW[1:] else SECTION[key])
-    page_header(where, title, lede, CHIP)
+    head, guide = st.columns([5, 1.7], vertical_alignment="top")
+    with head:
+        page_header(where, title, lede, CHIP)
+    with guide:
+        with st.container(horizontal=True, horizontal_alignment="right"):
+            if st.button("How to read this page", key=f"guide_{key}", icon=":material/menu_book:",
+                         help="What this page shows, how to read its charts, and the method in brief."):
+                show_guide(key)
 
 
 def footer(key: str) -> None:
@@ -1236,11 +1262,9 @@ def page_overview():
 
     st.subheader("Go further")
     with st.container(horizontal=True, gap="small"):
-        for key in ("scenarios", "cascade", "diversification", "copper", "materials", "ask", "methods"):
+        for key in ("supplymap", "scenarios", "cascade", "diversification", "copper", "materials", "ask", "methods"):
             st.page_link(PAGES[key], label=PAGES[key].title, icon=PAGES[key].icon)
 
-    with st.expander("How to use this dashboard", icon=":material/help:"):
-        st.markdown(HOW_TO_READ)
     footer("overview")
 
 
@@ -1786,6 +1810,107 @@ def page_scenarios():
         columns={"value": sc_axis.lower().replace(" ", "_")}),
         f"scenarios_{group['system']}_{scenario_material}.csv", "dl_scenarios")
     footer("scenarios")
+
+
+def page_supply_map():
+    header(
+        "supplymap", "Where it comes from, and where it goes",
+        f"Where {esc(short_material.lower())} is mined, how it moves between countries, and what happens "
+        "to that network when one supplier stops. Hover a country for its numbers, click it to isolate "
+        f"its trade, and press play to replay losing <b>{esc(removed_country)}</b>, the supplier set in "
+        "the sidebar.",
+    )
+    supply = load_supply()
+    fam = supply[supply.family == family]
+    measures = [m for m in ("Mine production", "Reserves") if m in set(fam.measure)]
+    c1, c2 = st.columns([2, 3], vertical_alignment="bottom")
+    with c1:
+        if len(measures) > 1:
+            measure = st.segmented_control("Circles show", measures, default=measures[0], required=True,
+                                           key=f"map_measure_{family}")
+        else:
+            measure = measures[0]
+            st.caption(f"Circles show mine production; the source series has no reserves table for "
+                       f"{family.lower()}.")
+    with c2:
+        top_n = st.slider(
+            "Largest trade flows drawn", min_value=10, max_value=60, value=30, step=5, key="map_top_n",
+            help="Drawing every bilateral link would bury the map, and the largest links carry most of "
+            "the value. The removed supplier's own largest flows are always added, so the replay has them.",
+        )
+
+    from build import REEXPORT_HUBS
+    payload, notes = build_map_payload(
+        family=family, measure=measure, edges=commodity_edges, top_n=top_n,
+        removed_country=removed_country, cascade=fragility, accent=ACCENT, commodity=group["name"],
+        hs_code=group["hs_code"], partners_json=str(CRM_TRADE_NETWORK_SRC.parent / "data" / "partners.json"),
+        hubs=set(REEXPORT_HUBS.values()), universe=fragility_universe,
+    )
+
+    rows = fam[(fam.measure == measure) & (fam.iso3 != "")].sort_values("tonnes", ascending=False)
+    top = rows.iloc[0]
+    has_share = str(top.share_pct).strip() != ""
+    if measure == "Mine production":
+        lead = (f"<b>{esc(top.country)}</b> mines <b>{float(top.share_pct):.0f}%</b> of the world's "
+                if has_share else f"<b>{esc(top.country)}</b> is the largest miner of ")
+        lead += f"{esc(family.lower())} ({esc(payload['bubbles'][0]['value'])} in {notes['year']})."
+    else:
+        lead = (f"<b>{esc(top.country)}</b> holds <b>{float(top.share_pct):.0f}%</b> of known "
+                if has_share else f"<b>{esc(top.country)}</b> holds the largest known ")
+        lead += f"{esc(family.lower())} reserves ({esc(payload['bubbles'][0]['value'])})."
+    e = commodity_edges[commodity_edges.exporter != commodity_edges.importer]
+    big = e.sort_values("value_usd", ascending=False).iloc[0]
+    lead += (f" The largest single trade flow is <b>{esc(big.exporter)}</b> to <b>{esc(big.importer)}</b>, "
+             f"{esc(usd(float(big.value_usd)))} in 2023.")
+    takeaway(lead)
+
+    supply_map(payload, key="supply_map")
+
+    with how_calculated():
+        st.markdown(
+            f"- **Circles and shading**: {measure.lower()} by country, {notes['unit']}, from USGS Mineral "
+            f"Commodity Summaries 2025 via the Materials Data Series (data/mine_supply.csv). Circle area is "
+            "proportional to tonnes. The source lists the leading countries only"
+            + (", plus: " + "; ".join(f"{n} {t}" for n, t in notes["other_supply"]) + " (not placed on the map)."
+               if notes["other_supply"] else ".")
+            + f"\n- **Arcs**: 2023 UN Comtrade trade in {group['name']} (HS {group['hs_code']}), by value, the "
+            f"same edge list every risk page uses: built from both importer and exporter reports, the larger "
+            f"of the two where they disagree. The {notes['flows_drawn']} arcs are the largest links plus "
+            f"{removed_country}'s own largest ones. Moving dots run from exporter to importer. This is one "
+            "stage of the chain, the traded form in that HS code, not mine to refinery to product."
+            + "\n- **Years**: production and reserves are 2024 (USGS 2025 edition); trade is 2023, the year "
+            "every trade figure in this dashboard uses. The map puts them side by side, it does not "
+            "combine them in any calculation."
+            + "\n- **Replay**: crm-trade-network's cascade model (the same run as the Cascade page), removing "
+            f"{removed_country} and letting any country that loses over 20% of its trade in this commodity "
+            "fail in turn, shown round by round."
+            + (f" {notes['cascade_offmap']} of the countries that fail have no position on this map "
+               "(territories and aggregates UN Comtrade reports separately)." if notes["cascade_offmap"] else "")
+            + "\n- **Placing countries**: by ISO3 code, trade partners through UN Comtrade's own partner "
+            "table (Taiwan is reported as \"Other Asia, nes\"). Outlines are Natural Earth 1:110m, anchor "
+            "points Natural Earth's 1:50m label points, drawn in the equal-area Equal Earth projection."
+            + (" Not placed (no single country position): " + ", ".join(notes["unplaced_trade"]) + "."
+               if notes["unplaced_trade"] else "")
+            + ("\n- **Re-export hubs** (the Netherlands, Belgium, Singapore, Hong Kong, the UAE): part of "
+               "their trade is transit rather than origin, and the tooltip says so.")
+        )
+        if group["hs_code"] == "2836":
+            st.caption("For lithium, HS 2836 covers all carbonates, and most of that trade by weight is not "
+                       "lithium carbonate (see the Disruption page's price note). Read the arcs as where "
+                       "carbonate trade goes, not as lithium tonnes.")
+        if not notes["has_history"]:
+            st.caption("The installed crm-trade-network does not report cascade rounds yet, so the replay "
+                       "button is off; the Cascade page still shows the final result.")
+    d1, d2 = st.columns(2)
+    with d1:
+        download_csv(fam[fam.measure == measure][["country", "iso3", "tonnes", "share_pct", "unit", "year", "source"]],
+                     f"{family.lower().replace(' ', '_')}_{measure.lower().replace(' ', '_')}.csv", "dl_map_supply",
+                     label="Download circles data (CSV)")
+    with d2:
+        download_csv(pd.DataFrame([{"exporter": f["fromName"], "importer": f["toName"], "value": f["usd"],
+                                    "tonnes": f["tonnes"]} for f in payload["flows"]]),
+                     f"trade_arcs_hs{group['hs_code']}.csv", "dl_map_flows", label="Download arcs data (CSV)")
+    footer("supplymap")
 
 
 def page_disruption():
@@ -2508,6 +2633,7 @@ PAGES = {
     "stocks": st.Page(page_stocks, title="Stocks & flows", icon=":material/swap_vert:", url_path="stocks-and-flows"),
     "eol": st.Page(page_eol, title="End-of-life materials", icon=":material/recycling:", url_path="end-of-life"),
     "scenarios": st.Page(page_scenarios, title="Scenarios", icon=":material/alt_route:", url_path="scenarios"),
+    "supplymap": st.Page(page_supply_map, title="Supply map", icon=":material/public:", url_path="supply-map"),
     "disruption": st.Page(page_disruption, title="Disruption & recovery", icon=":material/crisis_alert:",
                           url_path="disruption"),
     "cascade": st.Page(page_cascade, title="Cascade & trade network", icon=":material/hub:", url_path="cascade"),
@@ -2522,7 +2648,7 @@ PAGES = {
 NAV_SECTIONS = {
     "Start": ["overview"],
     "Physical flows": ["lifetimes", "stocks", "eol", "scenarios"],
-    "Supply risk": ["disruption", "cascade", "diversification"],
+    "Supply risk": ["supplymap", "disruption", "cascade", "diversification"],
     "Compare": ["copper", "materials"],
     "Reference": ["ask", "methods"],
 }

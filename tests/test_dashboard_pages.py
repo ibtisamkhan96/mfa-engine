@@ -1,6 +1,6 @@
 """Renders every dashboard page for every material, headless, and checks nothing breaks.
 
-The engine tests check the numbers; this checks the app that shows them. Each of the twelve pages
+The engine tests check the numbers; this checks the app that shows them. Each of the thirteen pages
 is run once per material choice (eight, counting copper once per system) through Streamlit's own
 AppTest harness, and the check fails on any uncaught exception, any st.error box, or a page that
 opens with the wrong title. It also confirms the sidebar's material picker drives the page: the
@@ -25,6 +25,7 @@ PAGES = {
     "stocks-and-flows": "Stocks and flows",
     "end-of-life": "What comes back out",
     "scenarios": None,  # "Scenarios", "Deployment scenarios" or "Capacity scenarios" by system
+    "supply-map": "Where it comes from, and where it goes",
     "disruption": "Disruption and recovery",
     "cascade": "How the shock spreads",
     "diversification": "What it would take to diversify",
@@ -43,6 +44,15 @@ MATERIALS = [
     ("Cobalt", None, "Cobalt in the global EV fleet"),
     ("Graphite", None, "Graphite in the global EV fleet"),
 ]
+
+
+# Page url -> the key its "How to read this page" button uses.
+GUIDE_KEYS = {
+    "overview": "overview", "lifetimes": "lifetimes", "stocks-and-flows": "stocks", "end-of-life": "eol",
+    "scenarios": "scenarios", "supply-map": "supplymap", "disruption": "disruption", "cascade": "cascade",
+    "diversification": "diversification", "copper": "copper", "all-materials": "materials", "ask": "ask",
+    "methods": "methods",
+}
 
 
 def page_title(at) -> str | None:
@@ -71,6 +81,13 @@ def main():
             title_ok = title is not None and (expected is None or title == expected)
             checks.append((f"{label:<22} {url:<18} renders cleanly" + (f" ({problems[0][:60]})" if problems else ""),
                            not problems and title_ok))
+            if family == "Copper" and found_in == "Wind":
+                # the guide dialog, once per page: it must open, and hold the four guide sections
+                at.button(key=f"guide_{GUIDE_KEYS[url]}").click().run()
+                text = " ".join(m.value for m in at.markdown)
+                dialog_ok = (not at.exception and all(h in text for h in (
+                    "What it shows.", "How to read it.", "Method, in brief.", "Try this.")))
+                checks.append((f"{label:<22} {url:<18} guide dialog opens", dialog_ok))
 
     print(f"{'check':<100}{'status':>8}")
     ok_all = True

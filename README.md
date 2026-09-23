@@ -179,15 +179,17 @@ filter and never reached the dashboard at all; (2) the STEPS trajectory kept ext
 gives; (3) the EV sales table was treated as if every vehicle ever sold were still on the
 road, overstating the stock and pushing retirements that already happened into the future.
 
-**One dashboard** (`app.py`, Streamlit), twelve pages in reading order. Overview first,
+**One dashboard** (`app.py`, Streamlit), thirteen pages in reading order. Overview first,
 then *Physical flows* (Lifetimes, Stocks & flows, End-of-life materials, Scenarios), *Supply
-risk* (Disruption & recovery, Cascade & trade network, Diversification), *Compare* (Copper
+risk* (Supply map, Disruption & recovery, Cascade & trade network, Diversification), *Compare* (Copper
 across technologies, All materials) and *Reference* (Ask the data, Methods & data). The
 sidebar holds what every page shares, in the order you need it: the material (and, for copper,
 which of the three systems it sits in), then the page list, then the horizon, recovery
 assumption, disrupted supplier and price. Material, system and horizon are kept in the URL, so
 a particular view can be sent as a link. Back and next links at the foot of each page follow
-the same order.
+the same order, and a "How to read this page" button at the top of every page opens a short
+guide: what the page shows, how to read its charts, the method in brief, and one thing to try
+(`ui/guides.py`).
 
 Every chart opens with one sentence computed from the numbers on screen, for example "In an
 average year to 2050, recycled copper from global EV batteries would cover 10.80% of one year's
@@ -200,6 +202,23 @@ as a band; Sankey diagrams for the physical flow and the trade network; recovery
 shortfall year by year, with the peak year next to the average; and real (low, central, high)
 price ranges where the traded product matches a market benchmark. A "fetch real data now"
 control re-asks UN Comtrade live.
+
+**An animated supply map** (`ui/supply_map.py`, `ui/supply_map.js`). A world map with three
+layers, all from data the rest of the dashboard already uses. Circles and shading show where the
+material is mined, or where its reserves sit (USGS Mineral Commodity Summaries 2025, 2024 data,
+via the Materials Data Series: `data/mine_supply.csv`, built by `scripts/build_mine_supply.py`).
+Arcs show the largest 2023 UN Comtrade trade links, with dots moving from exporter to importer.
+"Play the disruption" replays crm-trade-network's cascade round by round: the supplier set in
+the sidebar stops exporting, then every country that loses over 20% of its trade in that
+commodity fails in turn, and the map turns them red as they go. Hover a country for its numbers;
+click it to isolate its trade. The geometry is Natural Earth, projected once in Python with the
+equal-area Equal Earth projection (`data/world_map.json`, built by `scripts/build_world_map.py`),
+so the browser only animates: no mapping library or CDN is loaded at runtime. It is a Streamlit
+v2 custom component written in plain SVG and the Web Animations API, follows light and dark mode
+through Streamlit's theme variables, pauses when off screen, and draws a still map under
+`prefers-reduced-motion`. Production (2024) and trade (2023) are a year apart and are shown side
+by side, never combined in a calculation; the arcs are one stage of the chain, the traded form
+in each HS code.
 
 **Colours, themes and layout** (`ui/theme.py`, `.streamlit/config.toml`). Each
 material has its own colour, used for its sidebar tile, the accent line at the top of the
@@ -285,14 +304,14 @@ python tests/test_diversification.py          # LP respects its own constraints 
 python tests/test_scenarios.py                # the two deployment scenarios genuinely diverge, and by how much
 python tests/test_stock_flows.py              # mass balance closes every year; recovered never exceeds outflow
 python tests/test_data_centre.py              # stock-driven engine: tracks the requirement, steady-state spin-up, no negative building
-python tests/test_dashboard_pages.py          # every page, for every material, renders with no exception or error box
+python tests/test_dashboard_pages.py          # every page for every material renders cleanly; every page's reading guide opens
 ```
 
 ## What this honestly is not
 
 Not a finished substitute for either field. No life-cycle assessment, no
-geospatial layer yet (though the wind turbine register carries real
-coordinates and municipality data that would support one), no formal
+geospatial analysis yet (the Supply map places country-level data on a world map, but the wind
+turbine register's own coordinates and municipality data are not used), no formal
 uncertainty quantification yet (Monte Carlo over lifetimes, material
 intensities and recycling rates, all of which already carry real low/high
 ranges; today those ranges are shown as bounds, not propagated jointly), no

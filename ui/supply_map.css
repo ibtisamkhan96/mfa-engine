@@ -1,0 +1,104 @@
+/* Supply map styles. Colours come from Streamlit's own theme variables (--st-*), so the map
+   follows light and dark mode with no Python-side switch; the material colour arrives as --acc. */
+.sm-root {
+  --ink: var(--st-text-color, currentColor);
+  --paper: var(--st-background-color, transparent);
+  color: var(--ink);
+  font: inherit;
+}
+
+/* ---------- toolbar */
+.sm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 0 0 .7rem; }
+.sm-btn {
+  display: inline-flex; align-items: center; gap: .45rem;
+  font: inherit; font-size: .9rem; font-weight: 500; line-height: 1.2;
+  padding: .45rem .9rem; border-radius: .6rem; cursor: pointer; color: inherit;
+  background: transparent; border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease, opacity .2s ease;
+}
+.sm-btn:hover:not([disabled]) { border-color: var(--acc); background: rgba(var(--acc-rgb), .10); transform: translateY(-1px); }
+.sm-btn:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+.sm-btn.primary { background: var(--acc); border-color: var(--acc); color: #fff; }
+.sm-btn.primary:hover:not([disabled]) { background: color-mix(in oklab, var(--acc) 86%, #000); }
+.sm-btn[disabled] { opacity: .45; cursor: not-allowed; }
+.sm-btn[hidden] { display: none; }
+.sm-status { font-size: .9rem; line-height: 1.4; opacity: .88; min-height: 1.3em; font-variant-numeric: tabular-nums; flex: 1 1 18rem; }
+
+/* ---------- stage */
+.sm-stage {
+  position: relative; overflow: hidden; border-radius: 14px;
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.sm-stage svg { display: block; width: 100%; height: auto; }
+.grat path { fill: none; stroke: color-mix(in srgb, var(--ink) 7%, transparent); stroke-width: .5; }
+.land path {
+  fill: color-mix(in srgb, var(--ink) 8%, transparent);
+  stroke: color-mix(in srgb, var(--ink) 22%, transparent); stroke-width: .45;
+  transition: fill .7s ease, stroke .7s ease;
+}
+.land path.hot { cursor: pointer; }
+.land path.down { fill: color-mix(in srgb, var(--crit) 38%, transparent) !important; stroke: var(--crit); }
+
+.arc {
+  fill: none; stroke: var(--acc); stroke-linecap: round; opacity: .42;
+  transition: opacity .3s ease, stroke .4s ease;
+}
+.arc.severed { stroke: var(--crit); opacity: .9; }
+.focused .arc.dim, .arc.cut:not(.severed) { opacity: .05; }
+.focused .arc:not(.dim) { opacity: .8; }
+
+.pgroup { transition: opacity .3s ease; }
+.pgroup.dim, .pgroup.cut { opacity: 0; }
+.p-head { fill: var(--acc); }
+.p-t1 { fill: var(--acc); fill-opacity: .55; }
+.p-t2 { fill: var(--acc); fill-opacity: .28; }
+.p-halo { fill: var(--acc); fill-opacity: .16; }
+
+.bubble {
+  fill: var(--acc); fill-opacity: .5; stroke: var(--acc); stroke-width: 1.2; cursor: pointer;
+  transform-box: fill-box; transform-origin: center;
+  transition: opacity .3s ease, fill .5s ease, stroke .5s ease, fill-opacity .3s ease;
+}
+.bubble:hover, .bubble:focus { fill-opacity: .75; outline: none; stroke-width: 2; }
+.focused .bubble.dim { opacity: .22; }
+.bubble.down { fill: var(--crit); stroke: var(--crit); fill-opacity: .55; }
+.crit-dot { fill: var(--crit); }
+.ripple {
+  fill: none; stroke: var(--crit); stroke-width: 1.6; vector-effect: non-scaling-stroke;
+  transform-box: fill-box; transform-origin: center; pointer-events: none;
+}
+
+.label {
+  font-size: 11px; font-weight: 600; fill: var(--ink); pointer-events: none;
+  paint-order: stroke; stroke: var(--paper); stroke-width: 3px; stroke-linejoin: round;
+}
+.label .v { font-weight: 400; fill-opacity: .8; }
+.compact .labels { display: none; }
+
+/* ---------- tooltip */
+.sm-tip {
+  position: absolute; left: 0; top: 0; z-index: 2; pointer-events: none;
+  min-width: 11rem; max-width: 17rem; padding: .6rem .75rem; border-radius: 10px;
+  background: var(--st-secondary-background-color, var(--paper)); color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  box-shadow: 0 14px 30px -16px rgba(0, 0, 0, .5);
+  font-size: .82rem; line-height: 1.45;
+  opacity: 0; transform: translateY(4px); transition: opacity .15s ease, transform .15s ease;
+}
+.sm-tip.on { opacity: 1; transform: none; }
+.t-name { font-weight: 600; font-size: .9rem; margin-bottom: .25rem; }
+.t-row { display: block; }
+.t-k { display: block; margin-top: .35rem; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; opacity: .62; }
+.t-v { display: block; font-weight: 500; font-variant-numeric: tabular-nums; }
+.t-buyer { font-variant-numeric: tabular-nums; }
+.t-note { margin-top: .35rem; font-size: .76rem; opacity: .75; }
+
+/* ---------- legend */
+.sm-legend { display: flex; flex-wrap: wrap; gap: .45rem 1.4rem; margin-top: .65rem; font-size: .82rem; line-height: 1.35; }
+.sm-li { display: flex; align-items: center; gap: .45rem; opacity: .9; }
+.sm-li svg { flex: none; overflow: visible; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sm-root *, .sm-root *::before, .sm-root *::after { transition: none !important; animation: none !important; }
+}
