@@ -35,9 +35,11 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
+from mfa_engine.accounting import MaterialAccounting
+
 
 @dataclass
-class CohortSurvivalMFA:
+class CohortSurvivalMFA(MaterialAccounting):
     """Base class. Construct with two asset tables and the column names that
     carry the information this engine actually needs, then call
     .run(horizon_year) to get a year-by-year retirement schedule and the
@@ -61,6 +63,17 @@ class CohortSurvivalMFA:
     commissioned_col: str
     decommissioned_col: Optional[str] = None   # used only if lifetime_col is not already provided
     lifetime_col: Optional[str] = None         # a realised-lifetime column on `retired`, if already computed
+
+    # How `existing` should be read, the textbook dMFA distinction (Muller 2006; Pauliuk &
+    # Heeren's ODYM). False, the default: `existing` is an asset REGISTER, every row is known
+    # to still be in service at `snapshot`, so each asset's future is conditional on having
+    # survived to its current age, S(a)/S(a0). True: `existing` is an INFLOW table (sales
+    # or installations by year), nothing is known about which units survived, so each
+    # cohort decays from its own entry year under unconditional survival S(a), and the
+    # account starts at the first cohort's entry year, not at the snapshot. Treating sales
+    # as if they were survivors overstates the stock and pushes retirements that already
+    # happened into the future.
+    inflow_driven = False
 
     # ----------------------------------------------------------------- survival
     def build_observations(self) -> pd.DataFrame:
@@ -189,136 +202,114 @@ class CohortSurvivalMFA:
         return float(k), float(lam)
 
     # ------------------------------------------------------------------ cohorts
-    def project_retirement_schedule(self, horizon_year: int, k: float, lam: float) -> pd.DataFrame:
-        """Capacity (or count) retiring each year, by category, from
-        conditional survival: an asset that has already reached age a does
-        not face the whole survival curve, only what remains of it,
-        S(b)/S(a). Each asset is projected individually under its own age
-        and then summed, so the result is a genuine cohort model, not a
-        single average asset scaled up."""
+    def _projectable(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Which assets enter the projection. The default keeps only assets
+        already in service at `snapshot` (age0 > 0): in a real asset register,
+        a commissioning date after the snapshot is a data error, not a future
+        asset. A subclass whose cohorts come from a deployment table (sales
+        or installations by year) overrides this to keep post-snapshot
+        cohorts, which are then genuine future inflows, see
+        project_stock_flows."""
+        return df[df.age0 > 0]
+
+    def project_stock_flows(self, horizon_year: int, k: float, lam: float) -> pd.DataFrame:
+        """The full stock-flow account, one row per (year, category):
+        inflow_units (assets entering service that year), stock_units (assets
+        in service at that point), outflow_units (assets retiring that year).
+
+        Every asset is projected individually from its own age, then summed,
+        so this is a genuine cohort model, not one average asset scaled up.
+        For a register (inflow_driven False) that uses conditional survival:
+        an asset known to have reached age a only faces what remains of the
+        curve, S(b)/S(a). For an inflow table (inflow_driven True) each cohort
+        decays from its own entry year under unconditional survival S(b), see
+        the inflow_driven class attribute for why the two differ.
+
+        An asset commissioned after `snapshot` (only possible when a
+        subclass's _projectable keeps it) counts as nothing, not stock and
+        not outflow, until its own commissioning year, then enters once as
+        inflow. That makes the account close exactly every year:
+        stock(t) - stock(t-1) = inflow(t) - outflow(t). tests/test_stock_flows.py
+        checks this rather than trusting it."""
         df = self.existing.copy()
         df["age0"] = (self.snapshot - df[self.commissioned_col]).dt.days / 365.25
-        df = df[df.age0 > 0]
+        df = self._projectable(df)
 
         base_year = self.snapshot.year
-        years = np.arange(base_year, horizon_year + 1)
+        if self.inflow_driven:
+            start_year = int(df[self.commissioned_col].dt.year.min())
+            s0 = np.ones((len(df), 1))
+        else:
+            start_year = base_year
+            s0 = self.weibull_survival(df["age0"].values, k, lam)[:, None]
+        years = np.arange(start_year, horizon_year + 1)
         ages = df["age0"].values[:, None] + (years - base_year)[None, :]
 
-        s0 = self.weibull_survival(df["age0"].values, k, lam)[:, None]
         surv = np.clip(self.weibull_survival(ages, k, lam) / s0, 0, 1)
+        in_service = ages >= 0
+        # A register's first year is opening stock (it was already standing); an inflow
+        # table's first year is the first cohort ENTERING service, so it is inflow.
+        before_first_year = (np.zeros_like(in_service[:, [0]]) if self.inflow_driven
+                             else in_service[:, [0]])
+        was_in_service = np.hstack([before_first_year, in_service[:, :-1]])
 
+        units = df[self.unit_col].values[:, None].astype(float)
         retiring_fraction = np.hstack([1 - surv[:, [0]], surv[:, :-1] - surv[:, 1:]])
-        units_retiring = df[self.unit_col].values[:, None] * retiring_fraction
+        flows = {
+            "inflow_units": units * (in_service & ~was_in_service),
+            "stock_units": units * surv * in_service,
+            "outflow_units": units * retiring_fraction,
+        }
 
-        out = pd.DataFrame(units_retiring, columns=years)
-        out["category"] = df[self.category_col].values
-        long = out.melt(id_vars=["category"], var_name="year", value_name="units_retiring")
-        return long.groupby(["year", "category"], as_index=False).units_retiring.sum()
+        categories = df[self.category_col].values
+        merged = None
+        for name, values in flows.items():
+            wide = pd.DataFrame(values, columns=years)
+            wide["category"] = categories
+            long = (wide.melt(id_vars=["category"], var_name="year", value_name=name)
+                        .groupby(["year", "category"], as_index=False)[name].sum())
+            merged = long if merged is None else merged.merge(long, on=["year", "category"])
+        return merged
 
-    # ------------------------------------------------------------- materials
-    def material_intensity(self, category: str) -> dict[str, tuple[float, float, float]]:
-        """Real, sourced material content per unit for one category, as
-        {material_name: (low, central, high)}. This is the one piece of
-        real domain knowledge every subclass must provide, everything above
-        this method is generic and inherited unchanged. Raising here rather
-        than returning made-up numbers is deliberate: a subclass that
-        forgets to override this must fail loudly, not silently produce a
-        fabricated result."""
-        raise NotImplementedError(
-            f"{type(self).__name__} must implement material_intensity(category) "
-            "with real, sourced coefficients. This base class does not guess."
-        )
-
-    def secondary_materials(self, schedule: pd.DataFrame) -> pd.DataFrame:
-        """Material released each year by the retiring stock, using each
-        category's own real material intensity. Uses the central estimate of
-        each sourced range."""
-        rows = []
-        for year, grp in schedule.groupby("year"):
-            rec = {"year": int(year), "units_retiring": grp.units_retiring.sum()}
-            materials: dict[str, float] = {}
-            for category, sub in grp.groupby("category"):
-                intensity = self.material_intensity(category)
-                for material, (_, central, __) in intensity.items():
-                    materials[material] = materials.get(material, 0.0) + sub.units_retiring.sum() * central
-            rec.update(materials)
-            rows.append(rec)
-        return pd.DataFrame(rows).sort_values("year").reset_index(drop=True)
-
-    def secondary_materials_range(self, schedule: pd.DataFrame) -> pd.DataFrame:
-        """The real (low, high) bounds secondary_materials() itself receives
-        from material_intensity() but discards, keeping only the central
-        value. Every source this engine's two real subclasses use (JRC for
-        wind turbines, the CRS/GREET-derived figures for EV batteries)
-        reports these as a genuine range, not a single point estimate, and
-        collapsing straight to the centre throws that real information
-        away. A separate method rather than changing secondary_materials()
-        itself: the pooled central-value table is what a year-by-year total
-        needs and is already relied on elsewhere (tests, the Sankey), this
-        exists for the one real thing it cannot show, how much uncertainty
-        the source data itself actually carries.
-
-        Returns one row per year with `{material}_low` and `{material}_high`
-        columns alongside secondary_materials()'s own `{material}` central
-        columns, so a caller can plot a real band around a real line rather
-        than inventing one."""
-        rows = []
-        for year, grp in schedule.groupby("year"):
-            rec = {"year": int(year)}
-            low_totals: dict[str, float] = {}
-            high_totals: dict[str, float] = {}
-            for category, sub in grp.groupby("category"):
-                intensity = self.material_intensity(category)
-                units = sub.units_retiring.sum()
-                for material, (low, _, high) in intensity.items():
-                    low_totals[material] = low_totals.get(material, 0.0) + units * low
-                    high_totals[material] = high_totals.get(material, 0.0) + units * high
-            for material in low_totals:
-                rec[f"{material}_low"] = low_totals[material]
-                rec[f"{material}_high"] = high_totals[material]
-            rows.append(rec)
-        return pd.DataFrame(rows).sort_values("year").reset_index(drop=True)
-
-    def secondary_materials_by_category(self, schedule: pd.DataFrame,
-                                         horizon_year: Optional[int] = None) -> pd.DataFrame:
-        """Same arithmetic as secondary_materials, but keeps the category
-        breakdown instead of pooling it away: one row per (category,
-        material), summed over every year up to horizon_year (or the whole
-        schedule, if not given). secondary_materials() deliberately pools
-        across category because that is what a year-by-year total needs;
-        this exists for the one thing that pooled view cannot show, which
-        asset category is the source of which material. Summing this
-        output across category reproduces secondary_materials()'s own
-        per-material totals exactly."""
-        df = schedule if horizon_year is None else schedule[schedule.year <= horizon_year]
-        rows = []
-        for category, sub in df.groupby("category"):
-            intensity = self.material_intensity(category)
-            total_units = sub.units_retiring.sum()
-            for material, (_, central, __) in intensity.items():
-                rows.append({"category": category, "material": material,
-                             "tonnes": total_units * central})
-        return pd.DataFrame(rows)
+    def project_retirement_schedule(self, horizon_year: int, k: float, lam: float) -> pd.DataFrame:
+        """Units retiring each year, by category: the outflow column of
+        project_stock_flows, kept as its own method because the secondary
+        material accounting below and every test built before stock-flow
+        accounting existed read it in exactly this shape. One source of
+        truth, so the retirement wave and the stock account can never
+        disagree with each other."""
+        sf = self.project_stock_flows(horizon_year, k, lam)
+        return sf[["year", "category", "outflow_units"]].rename(columns={"outflow_units": "units_retiring"})
 
     # --------------------------------------------------------------------- run
+    def _results_from_fit(self, horizon_year: int, k: float, lam: float) -> dict:
+        """Everything downstream of the lifetime fit, shared by every
+        subclass however it obtains (k, lam): the stock-flow account, the
+        retirement wave read from it, and both in material terms."""
+        stock_flows = self.project_stock_flows(horizon_year, k, lam)
+        schedule = stock_flows[["year", "category", "outflow_units"]].rename(
+            columns={"outflow_units": "units_retiring"})
+        return {
+            "weibull_shape": k,
+            "weibull_scale": lam,
+            "stock_flows": stock_flows,
+            "material_stock_flows": self.material_stock_flows(stock_flows),
+            "retirement_schedule": schedule,
+            "secondary_materials": self.secondary_materials(schedule),
+        }
+
     def run(self, horizon_year: int) -> dict:
         """The whole pipeline, start to finish: fit the lifetime model from
-        real censored data, project the cohort-by-cohort retirement wave out
-        to horizon_year, and compute the secondary material flow that comes
-        with it. Returns everything a caller would want to inspect, rather
-        than only the final table, so the lifetime fit itself can be
-        checked, not just trusted."""
+        real censored data, then build the full stock-flow account and the
+        end-of-life material outflow that comes with it. Returns everything
+        a caller would want to inspect, not only the final table, so the
+        lifetime fit itself can be checked, not just trusted."""
         obs = self.build_observations()
         km = self.kaplan_meier(obs.duration.values, obs.event.values)
         k, lam = self.fit_weibull(obs.duration.values, obs.event.values)
-        schedule = self.project_retirement_schedule(horizon_year, k, lam)
-        materials = self.secondary_materials(schedule)
         return {
             "observations": obs,
             "kaplan_meier": km,
-            "weibull_shape": k,
-            "weibull_scale": lam,
             "median_survival_years": self.median_survival(km),
-            "retirement_schedule": schedule,
-            "secondary_materials": materials,
+            **self._results_from_fit(horizon_year, k, lam),
         }

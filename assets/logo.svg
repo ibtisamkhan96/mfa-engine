@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="176" height="32" viewBox="0 0 176 32" role="img" aria-label="mfa-engine">
+  <path d="M16 2.6 27.6 9.3v13.4L16 29.4 4.4 22.7V9.3z" fill="none" stroke="#0D8579" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M16 9.6 21.5 12.8v6.4L16 22.4l-5.5-3.2v-6.4z" fill="#0D8579"/>
+  <text x="37" y="21.6" font-family="'IBM Plex Mono','Cascadia Mono',Consolas,monospace" font-size="15.5" font-weight="600" fill="#0D8579">mfa-engine</text>
+</svg>

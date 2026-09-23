@@ -5,7 +5,9 @@ pandas>=2.0,<3.0
 # real Docker build, not a hypothetical.
 numpy>=1.24
 scipy>=1.10
-streamlit>=1.50
+streamlit>=1.58
+# 1.58 or newer: the dashboard uses separate light/dark themes in config.toml, widgets bound
+# to URL query parameters, gap-free containers and metric captions without delta arrows.
 plotly>=6.0
 networkx>=3.0
 xlrd>=2.0

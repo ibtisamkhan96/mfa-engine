@@ -1,13 +1,43 @@
+# Both a light and a dark theme are defined, so the app follows the viewer's OS setting by
+# default and the settings menu offers both. Chart colours are validated against exactly these
+# two backgrounds (#FAFAF7 and #111316), see ui/theme.py.
 [theme]
-base = "dark"
-primaryColor = "#5EEAD4"
-backgroundColor = "#0B0E11"
-secondaryBackgroundColor = "#151A1F"
-textColor = "#E6EDF3"
-font = "sans serif"
+font = "'IBM Plex Sans':https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap, sans-serif"
+codeFont = "'IBM Plex Mono':https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap, monospace"
+baseRadius = "0.6rem"
+buttonRadius = "0.6rem"
+showSidebarBorder = true
+
+[theme.light]
+primaryColor = "#0B7A70"
+backgroundColor = "#FAFAF7"
+secondaryBackgroundColor = "#EFEEE9"
+textColor = "#17191C"
+borderColor = "#DEDCD5"
+linkColor = "#0B6A61"
+
+[theme.light.sidebar]
+backgroundColor = "#F2F1EC"
+secondaryBackgroundColor = "#E6E4DE"
+borderColor = "#DAD8D0"
+
+[theme.dark]
+primaryColor = "#0D8579"
+backgroundColor = "#111316"
+secondaryBackgroundColor = "#1C1F24"
+textColor = "#E7E9EC"
+borderColor = "#2B2F35"
+linkColor = "#4FD1C0"
+
+[theme.dark.sidebar]
+backgroundColor = "#0C0E10"
+secondaryBackgroundColor = "#1A1D21"
+borderColor = "#24282D"
 
 [client]
 showErrorDetails = true
+# Hides the developer-only Deploy button; the app menu (settings, theme, print) stays.
+toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false

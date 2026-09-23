@@ -41,10 +41,26 @@ from mfa_engine.cohort_survival import CohortSurvivalMFA
 #         with the well-known ~3.1 million 2020 figure this growth rate is
 #         reported against
 #   2019: derived from the same 43% growth figure (3.1 / 1.43 = 2.2)
+#   2025: "more than 20 million electric cars were sold worldwide in 2025"
+#         (IEA, Global EV Outlook 2026, 25% of all new cars sold globally)
+#   2026: "global electric car sales to rise to around 23 million in 2026"
+#         (IEA, Global EV Outlook 2026, its own current-year projection,
+#         28% of total car sales worldwide), checked live this session, not
+#         a hypothetical scenario, IEA's own stated figure for the year
+#         this engine is actually run in
 # Years before 2019 are not included: real volumes were small enough
 # (low hundreds of thousands to ~2 million per year) that omitting them
 # changes total fleet mass only marginally, and every number actually used
 # here was checked live this session rather than carried over from memory.
+# The fleet's "as of" date: end of 2025, the last complete year with a real,
+# reported sales figure. Cohorts sold up to here are opening stock; the 2026
+# cohort (IEA's own current-year projection, not a completed year) enters the
+# stock account as an inflow in 2026 instead, as does anything a deployment
+# scenario adds after it. One constant, shared by the dashboard and
+# mfa_engine.scenarios, so the two can never silently disagree about which
+# cohorts count as already on the road.
+SNAPSHOT = pd.Timestamp("2025-12-31")
+
 GLOBAL_EV_SALES_MILLIONS: dict[int, float] = {
     2019: 2.2,
     2020: 3.1,
@@ -52,6 +68,8 @@ GLOBAL_EV_SALES_MILLIONS: dict[int, float] = {
     2022: 10.5,
     2023: 14.0,
     2024: 17.0,
+    2025: 20.0,
+    2026: 23.0,
 }
 
 # Real LFP share of global EV battery sales at three anchor years:
@@ -64,7 +82,9 @@ GLOBAL_EV_SALES_MILLIONS: dict[int, float] = {
 # low starting share, consistent with LFP's well-documented resurgence
 # beginning around 2020 (Tesla's China-made Model 3 switching to LFP that
 # year), not a citation. Flagged here so this specific gap is never mistaken
-# for a sourced figure later.
+# for a sourced figure later. 2026 has no real anchor of its own yet, so it
+# is held flat at the real 2025 figure, a disclosed assumption, not a
+# citation, same treatment as 2019-2021.
 LFP_SHARE_BY_YEAR: dict[int, float] = {
     2019: 0.10,   # assumption, not independently verified this session
     2020: 0.15,   # assumption, not independently verified this session
@@ -72,6 +92,8 @@ LFP_SHARE_BY_YEAR: dict[int, float] = {
     2022: 0.30,   # real: IEA Global EV Outlook 2023
     2023: 0.40,   # interpolated between the real 2022 and 2024 anchors
     2024: 0.50,   # real: IEA Global EV Outlook 2025 ("nearly half")
+    2025: 0.55,   # real: IEA Global EV Outlook 2026 ("over 55%")
+    2026: 0.55,   # held flat at the 2025 anchor, disclosed assumption
 }
 
 # Real NHTSA passenger-vehicle survivability-by-age, Table 3 of Lu, S.
@@ -166,22 +188,32 @@ class EVBatteryMFA(CohortSurvivalMFA):
     through to eventual retirement. See this module's own docstring for
     why run() is overridden rather than inherited unchanged."""
 
+    # Rows are SALES by year, not a register of vehicles known to still be on the road, so
+    # this is an inflow-driven model: each cohort decays from its own sale year, and the
+    # stock at the snapshot is sales times survival, not total sales. See the base class's
+    # inflow_driven attribute.
+    inflow_driven = True
+
     def material_intensity(self, category: str) -> dict[str, tuple[float, float, float]]:
         return _material_intensity_by_chemistry(category)
 
+    def _projectable(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Keep every cohort, including ones sold after `snapshot`. These
+        cohorts come from a sales table, not an asset register, so a sale
+        year after the snapshot is a real future inflow (IEA's own 2026
+        figure, or a deployment scenario), not a data error. The base
+        class's age0 > 0 filter used to drop them silently: with the
+        snapshot at 2024-12-31, the real 2025 and 2026 sales, about 43
+        million vehicles, never reached the dashboard at all."""
+        return df
+
     def run(self, horizon_year: int) -> dict:
         k, lam = self.fit_weibull_to_curve(_NHTSA_AGES, _NHTSA_SURVIVAL)
-        schedule = self.project_retirement_schedule(horizon_year, k, lam)
-        materials = self.secondary_materials(schedule)
-        weibull_median = lam * np.log(2) ** (1 / k)
         return {
             "observations": None,          # no real censored observations exist yet for this population, see class docstring
             "kaplan_meier": None,           # same reason: nothing real to build an empirical curve from
-            "weibull_shape": k,
-            "weibull_scale": lam,
-            "median_survival_years": weibull_median,
-            "retirement_schedule": schedule,
-            "secondary_materials": materials,
+            "median_survival_years": lam * np.log(2) ** (1 / k),
+            **self._results_from_fit(horizon_year, k, lam),
         }
 
 
