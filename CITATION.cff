@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using these metadata."
+title: "mfa-engine: a reusable dynamic material flow analysis engine linked to critical raw material trade risk"
+type: software
+authors:
+  - family-names: Khan
+    given-names: Ibtisam Ahmed
+version: 1.0.0
+license: MIT
+repository-code: "https://github.com/ibtisamkhan96/mfa-engine"
+url: "https://mfa-engine-production.up.railway.app/"
+abstract: >-
+  A reusable dynamic material flow analysis (dMFA) engine covering the three
+  standard driving modes: register-based, inflow-driven and stock-driven. It is
+  applied to Denmark's wind turbine fleet (from the national turbine register),
+  the global electric vehicle fleet and global data centres, and tracks inflow,
+  in-use stock, end-of-life outflow and recovery for materials including copper,
+  lithium, nickel, cobalt, manganese, graphite, steel and the rare earths
+  neodymium, praseodymium, dysprosium and terbium, with a mass balance checked
+  every year. Projected recovery is linked to 2023 UN Comtrade bilateral trade data
+  from crm-trade-network for supply concentration (HHI), a linear-threshold
+  cascade model with a failure-threshold sweep, and a linear program for the
+  minimum trade reallocation that meets the EU Critical Raw Materials Act's 65%
+  single-country benchmark. Includes an interactive Streamlit dashboard.
+keywords:
+  - dynamic material flow analysis
+  - critical raw materials
+  - supply chain resilience
+  - trade network
+  - wind energy
+  - electric vehicles
+  - data centres
+  - recycling
