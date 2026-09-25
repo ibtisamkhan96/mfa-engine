@@ -5,7 +5,9 @@ type: software
 authors:
   - family-names: Khan
     given-names: Ibtisam Ahmed
+    orcid: "https://orcid.org/0009-0003-8155-9585"
 version: 1.0.0
+doi: 10.5281/zenodo.22944494
 license: MIT
 repository-code: "https://github.com/ibtisamkhan96/mfa-engine"
 url: "https://mfa-engine-production.up.railway.app/"

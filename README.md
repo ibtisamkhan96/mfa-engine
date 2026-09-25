@@ -1,5 +1,7 @@
 # mfa-engine
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22944494.svg)](https://doi.org/10.5281/zenodo.22944494)
+
 A reusable dynamic material flow analysis (dMFA) engine, connected to a real
 supply-chain risk dataset. Built to answer one question the existing
 literature on modular MFA tools (ODYM, flodym, MISO2, GCMat) does not:
