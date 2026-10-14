@@ -10,7 +10,7 @@ version: 1.0.0
 doi: 10.5281/zenodo.22944494
 license: MIT
 repository-code: "https://github.com/ibtisamkhan96/mfa-engine"
-url: "https://mfa-engine-production.up.railway.app/"
+url: "https://mfa-engine.streamlit.app/"
 abstract: >-
   A reusable dynamic material flow analysis (dMFA) engine covering the three
   standard driving modes: register-based, inflow-driven and stock-driven. It is
